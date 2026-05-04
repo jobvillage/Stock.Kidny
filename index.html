@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f5f7fb" />
+  <title>ระบบบันทึกสต็อกสินค้า</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=20260504-ios1" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="logo-icon" aria-hidden="true">📦</div>
+      <div class="header-text">
+        <p class="eyebrow">Stock Management</p>
+        <h1>ระบบบันทึกสต็อกสินค้า</h1>
+        <p class="subtitle">บันทึกข้อมูลรับเข้าและเบิกออกลง Google Sheets</p>
+      </div>
+    </header>
+
+    <main class="content-card" aria-live="polite">
+      <section class="overview-card">
+        <div>
+          <span class="overview-label">เลือกประเภทการทำรายการ</span>
+          <strong id="active-mode-label">รับสินค้าเข้า</strong>
+        </div>
+        <span class="overview-pill" id="sync-status">กำลังโหลดสต็อก...</span>
+      </section>
+
+      <nav class="segmented-control" aria-label="เลือกประเภทการบันทึก">
+        <button class="segment is-active" type="button" data-tab="in" id="tab-in">
+          <span class="segment-icon">📥</span>
+          <span>รับเข้า</span>
+        </button>
+        <button class="segment" type="button" data-tab="out" id="tab-out">
+          <span class="segment-icon">📤</span>
+          <span>เบิกออก</span>
+        </button>
+      </nav>
+
+      <section class="panel is-active" id="panel-in" data-panel="in">
+        <div class="panel-title">
+          <span class="title-icon in">📥</span>
+          <div>
+            <h2>บันทึกการรับสินค้าเข้า</h2>
+            <p>เลือกศูนย์และเพิ่มรายการสินค้าที่รับเข้า</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label for="in-date">วันที่รับเข้า</label>
+            <input type="date" id="in-date" />
+          </div>
+          <div class="field-group">
+            <label for="in-person">ผู้รับเข้า</label>
+            <input type="text" id="in-person" placeholder="ชื่อผู้รับสินค้า" autocomplete="name" />
+          </div>
+          <div class="field-group">
+            <label for="in-center">ระบุศูนย์</label>
+            <select id="in-center">
+              <option value="">— เลือกศูนย์ —</option>
+              <option value="ไตบน">ไตบน</option>
+              <option value="ไตล่าง">ไตล่าง</option>
+              <option value="ไตดี">ไตดี</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="in-note">หมายเหตุ</label>
+            <input type="text" id="in-note" placeholder="เช่น เลขที่ใบสั่งซื้อ" />
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="products-header">
+          <div>
+            <span>รายการสินค้า</span>
+            <small>เพิ่มได้หลายรายการในครั้งเดียว</small>
+          </div>
+          <button class="btn-add-row" type="button" data-add-row="in">+ เพิ่มรายการ</button>
+        </div>
+
+        <div class="products-columns products-columns-in" aria-hidden="true">
+          <span>สินค้า</span>
+          <span>คงเหลือเดิม</span>
+          <span>รับเข้า</span>
+          <span></span>
+        </div>
+
+        <div id="in-products" class="product-list"></div>
+
+        <button class="btn-submit btn-submit-in" id="btn-in" type="button" data-submit="in">
+          <span>📥</span>
+          <span>บันทึกการรับสินค้า</span>
+        </button>
+      </section>
+
+      <section class="panel panel-out" id="panel-out" data-panel="out">
+        <div class="panel-title">
+          <span class="title-icon out">📤</span>
+          <div>
+            <h2>บันทึกการเบิกสินค้า</h2>
+            <p>ระบบจะตรวจสอบจำนวนคงเหลือก่อนบันทึก</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label for="out-date">วันที่เบิกใช้</label>
+            <input type="date" id="out-date" />
+          </div>
+          <div class="field-group">
+            <label for="out-person">ผู้เบิกใช้</label>
+            <input type="text" id="out-person" placeholder="ชื่อผู้เบิกสินค้า" autocomplete="name" />
+          </div>
+          <div class="field-group">
+            <label for="out-center">ระบุศูนย์</label>
+            <select id="out-center">
+              <option value="">— เลือกศูนย์ —</option>
+              <option value="ไตบน">ไตบน</option>
+              <option value="ไตล่าง">ไตล่าง</option>
+              <option value="ไตดี">ไตดี</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="out-note">หมายเหตุ</label>
+            <input type="text" id="out-note" placeholder="เช่น แผนก / วัตถุประสงค์" />
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="products-header">
+          <div>
+            <span>รายการสินค้า</span>
+            <small>ใส่จำนวนที่ต้องการเบิก</small>
+          </div>
+          <button class="btn-add-row out" type="button" data-add-row="out">+ เพิ่มรายการ</button>
+        </div>
+
+        <div id="out-products" class="product-list"></div>
+
+        <button class="btn-submit btn-submit-out" id="btn-out" type="button" data-submit="out">
+          <span>📤</span>
+          <span>บันทึกการเบิกสินค้า</span>
+        </button>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="assertive"></div>
+
+  <script src="app.js?v=20260504-ios1" defer></script>
+</body>
+</html>
