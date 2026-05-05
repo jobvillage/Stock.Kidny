@@ -1182,3 +1182,43 @@ button {
   color: #7b8494;
   white-space: nowrap;
 }
+
+/* =====================
+   Mobile: ให้เมนู เบิกออก / Transfer / รับของ อยู่บรรทัดเดียว
+   ===================== */
+@media (max-width: 720px) {
+  .segmented-control.segmented-control-4 {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow: hidden;
+    padding: 5px;
+  }
+
+  .segmented-control.segmented-control-4 .segment {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 6px;
+    gap: 5px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .segmented-control.segmented-control-4 .segment-icon {
+    font-size: 16px;
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 390px) {
+  .segmented-control.segmented-control-4 .segment {
+    font-size: 12px;
+    padding: 0 4px;
+    gap: 4px;
+  }
+
+  .segmented-control.segmented-control-4 .segment-icon {
+    font-size: 15px;
+  }
+}
