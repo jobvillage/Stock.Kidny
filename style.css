@@ -1222,3 +1222,112 @@ button {
     font-size: 15px;
   }
 }
+
+/* =====================
+   Performance Mode: ลด Animation ให้เว็บไวขึ้น
+   ===================== */
+
+/* ลดเวลา animation หลัก */
+.app-header,
+.content-card,
+.panel.is-active,
+.product-row,
+.stock-info {
+  animation-duration: 0.12s !important;
+}
+
+/* ลด transition ทุกปุ่ม / input / card */
+.segment,
+.btn-add-row,
+.btn-submit,
+.btn-remove-row,
+.field-group input,
+.field-group select,
+.product-row input,
+.product-row select,
+.toast,
+.overview-pill {
+  transition-duration: 0.12s !important;
+}
+
+/* ลด blur หนัก ๆ ที่ทำให้มือถือบางเครื่องหน่วง */
+.content-card,
+.toast {
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* ลด shadow หนัก */
+.content-card {
+  box-shadow: 0 12px 34px rgba(44, 61, 98, 0.12) !important;
+}
+
+.logo-icon,
+.btn-submit {
+  box-shadow: 0 8px 20px rgba(44, 61, 98, 0.10) !important;
+}
+
+/* ลด effect ตอนกด ไม่ให้รู้สึกหน่วง */
+.segment:active,
+.btn-add-row:active,
+.btn-submit:active,
+.btn-remove-row:active {
+  transform: scale(0.99) !important;
+}
+
+/* ลด animation เปลี่ยน tab ให้เร็วขึ้น */
+@keyframes panelEnter {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+    filter: none;
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    filter: none;
+  }
+}
+
+@keyframes fadeScaleIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes rowEnter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.segment {
+  position: relative;
+}
+
+.segment-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ff5a5f;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 8px;
+  box-shadow: 0 4px 10px rgba(255, 90, 95, 0.22);
+}
