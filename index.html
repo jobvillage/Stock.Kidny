@@ -8,18 +8,49 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260504-ios1" />
+  <link rel="stylesheet" href="style.css?v=20260505-transfer-layout2" />
 </head>
 <body>
-  <div class="app-shell">
+  <section class="login-screen" id="login-screen">
+    <div class="login-card">
+      <div class="logo-icon login-logo" aria-hidden="true">📦</div>
+      <p class="eyebrow">Stock Management</p>
+      <h1>เข้าสู่ระบบสต็อกสินค้า</h1>
+      <p class="subtitle">กรอกรหัสเจ้าหน้าที่และรหัสผ่าน เพื่อเปิดเมนูตามสิทธิ์ของแต่ละศูนย์</p>
+
+      <div class="login-form">
+        <label for="login-code">รหัสเจ้าหน้าที่</label>
+        <input type="text" id="login-code" placeholder="เช่น staff1, staff2, staff3" autocomplete="username" />
+
+        <label for="login-password">รหัสผ่าน</label>
+        <div class="password-field">
+          <input type="password" id="login-password" placeholder="กรอกรหัสผ่าน" autocomplete="current-password" inputmode="numeric" />
+          <button class="btn-toggle-password" id="toggle-password" type="button" aria-label="แสดงรหัสผ่าน">แสดง</button>
+        </div>
+
+        <button class="btn-login" id="btn-login" type="button">เข้าสู่ระบบ</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="app-shell" id="app-shell" hidden>
     <header class="app-header">
       <div class="logo-icon" aria-hidden="true">📦</div>
       <div class="header-text">
         <p class="eyebrow">Stock Management</p>
         <h1>ระบบบันทึกสต็อกสินค้า</h1>
-        <p class="subtitle">บันทึกข้อมูลรับเข้าและเบิกออกลง Google Sheets</p>
+        <p class="subtitle">บันทึกรับเข้า เบิกออก และโอนยืมสินค้าระหว่างศูนย์</p>
       </div>
     </header>
+
+    <section class="user-card">
+      <div>
+        <span class="overview-label">ผู้ใช้งานปัจจุบัน</span>
+        <strong id="current-user-name">—</strong>
+        <p id="current-user-role">—</p>
+      </div>
+      <button class="btn-logout" id="btn-logout" type="button">ออกจากระบบ</button>
+    </section>
 
     <main class="content-card" aria-live="polite">
       <section class="overview-card">
@@ -30,7 +61,7 @@
         <span class="overview-pill" id="sync-status">กำลังโหลดสต็อก...</span>
       </section>
 
-      <nav class="segmented-control" aria-label="เลือกประเภทการบันทึก">
+      <nav class="segmented-control segmented-control-4" aria-label="เลือกประเภทการบันทึก">
         <button class="segment is-active" type="button" data-tab="in" id="tab-in">
           <span class="segment-icon">📥</span>
           <span>รับเข้า</span>
@@ -39,6 +70,14 @@
           <span class="segment-icon">📤</span>
           <span>เบิกออก</span>
         </button>
+        <button class="segment" type="button" data-tab="transfer" id="tab-transfer">
+          <span class="segment-icon">🔁</span>
+          <span>Transfer</span>
+        </button>
+        <button class="segment" type="button" data-tab="pending" id="tab-pending">
+          <span class="segment-icon">✅</span>
+          <span>รับของ</span>
+        </button>
       </nav>
 
       <section class="panel is-active" id="panel-in" data-panel="in">
@@ -46,7 +85,7 @@
           <span class="title-icon in">📥</span>
           <div>
             <h2>บันทึกการรับสินค้าเข้า</h2>
-            <p>เลือกศูนย์และเพิ่มรายการสินค้าที่รับเข้า</p>
+            <p>สำหรับ staff1 หรือผู้ที่มีสิทธิ์รับสินค้าเข้า</p>
           </div>
         </div>
 
@@ -104,7 +143,7 @@
           <span class="title-icon out">📤</span>
           <div>
             <h2>บันทึกการเบิกสินค้า</h2>
-            <p>ระบบจะตรวจสอบจำนวนคงเหลือก่อนบันทึก</p>
+            <p>staff ประจำศูนย์จะเบิกได้เฉพาะศูนย์ของตัวเอง</p>
           </div>
         </div>
 
@@ -149,11 +188,89 @@
           <span>บันทึกการเบิกสินค้า</span>
         </button>
       </section>
+
+      <section class="panel panel-transfer" id="panel-transfer" data-panel="transfer">
+        <div class="panel-title">
+          <span class="title-icon transfer">🔁</span>
+          <div>
+            <h2>Transfer / ยืมของระหว่างศูนย์</h2>
+            <p>โอนออกจากศูนย์ต้นทาง แล้วรอศูนย์ปลายทางกดยืนยันรับก่อนเข้าสต็อก</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field-group">
+            <label for="transfer-date">วันที่ทำรายการ</label>
+            <input type="date" id="transfer-date" />
+          </div>
+          <div class="field-group">
+            <label for="transfer-person">ผู้ทำรายการ</label>
+            <input type="text" id="transfer-person" placeholder="ชื่อผู้โอน / ผู้ยืม" autocomplete="name" />
+          </div>
+          <div class="field-group">
+            <label for="transfer-from-center">ศูนย์ต้นทาง</label>
+            <select id="transfer-from-center">
+              <option value="">— เลือกศูนย์ต้นทาง —</option>
+              <option value="ไตบน">ไตบน</option>
+              <option value="ไตล่าง">ไตล่าง</option>
+              <option value="ไตดี">ไตดี</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="transfer-to-center">ศูนย์ปลายทาง</label>
+            <select id="transfer-to-center">
+              <option value="">— เลือกศูนย์ปลายทาง —</option>
+              <option value="ไตบน">ไตบน</option>
+              <option value="ไตล่าง">ไตล่าง</option>
+              <option value="ไตดี">ไตดี</option>
+            </select>
+          </div>
+          <div class="field-group field-group-full">
+            <label for="transfer-note">หมายเหตุ</label>
+            <input type="text" id="transfer-note" placeholder="เช่น ยืมชั่วคราว / คืนของ / เหตุผลการโอน" />
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="products-header">
+          <div>
+            <span>รายการสินค้า Transfer</span>
+            <small>ระบบจะเช็กจำนวนคงเหลือของศูนย์ต้นทาง</small>
+          </div>
+          <button class="btn-add-row transfer" type="button" data-add-row="transfer">+ เพิ่มรายการ</button>
+        </div>
+
+        <div id="transfer-products" class="product-list"></div>
+
+        <button class="btn-submit btn-submit-transfer" id="btn-transfer" type="button" data-submit="transfer">
+          <span>🔁</span>
+          <span>สร้างรายการ Transfer</span>
+        </button>
+      </section>
+
+      <section class="panel panel-pending" id="panel-pending" data-panel="pending">
+        <div class="panel-title">
+          <span class="title-icon pending">✅</span>
+          <div>
+            <h2>รายการรอยืนยันรับเข้า</h2>
+            <p>กดรับเมื่อศูนย์ของคุณได้รับของแล้ว จึงจะเพิ่มเข้าสต็อก</p>
+          </div>
+        </div>
+
+        <div class="pending-toolbar">
+          <button class="btn-add-row pending-refresh" type="button" id="btn-refresh-transfers">รีเฟรชรายการ</button>
+        </div>
+
+        <div id="pending-transfers" class="pending-list">
+          <div class="empty-state">ยังไม่มีรายการรอรับ</div>
+        </div>
+      </section>
     </main>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="assertive"></div>
 
-  <script src="app.js?v=20260504-ios1" defer></script>
+  <script src="app.js?v=20260505-transfer-layout2" defer></script>
 </body>
 </html>
