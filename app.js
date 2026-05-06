@@ -1,7 +1,7 @@
 // =====================
 // CONFIG — ฝังหลังบ้าน
 // =====================
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw8Z3jtbpRZB5ZslPK2u_Cdtcw_hiVVP9Gg6xOHnkSgBbT2xhrEikOid5cLcdcPdG5a/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby6HftKeGFb0nrEYydWwH4Ps98patvyHfmGX0q1v5acpKSeqiuW9e5p_RIg0Qucz0K5rw/exec';
 const SESSION_KEY = 'stockAppSessionV2';
 const STOCK_CACHE_KEY = 'stockAppCachedStockV1';
 const TRANSFER_CACHE_KEY = 'stockAppCachedPendingTransfersV1';
@@ -19,10 +19,19 @@ const PRODUCTS = [
 ];
 
 // =====================
+// SUPABASE CONFIG
+// =====================
+const SUPABASE_URL = 'https://bqoenwdfjiogftacmqhb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxb2Vud2RmamlvZ2Z0YWNtcWhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwNjgwNjEsImV4cCI6MjA5MzY0NDA2MX0.GpHgm4kSjiL7gXOCEOAwEgCMeMCIG7R4y4jmcIAy33o';
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+// =====================
 // AUTH / PERMISSIONS
 // =====================
-// ไม่เก็บ password ใน app.js แล้ว
-// password จะถูกส่งไปตรวจที่ Google Apps Script เทียบกับ PasswordHash ใน Sheet Users
 
 let currentUser = null;
 
@@ -151,23 +160,20 @@ async function login() {
     return;
   }
 
-  const requestId = newRequestId('login');
-
   showToast('', 'loading', 'กำลังเข้าสู่ระบบ...');
 
   try {
-    const params = new URLSearchParams({
-      action: 'login',
-      staffCode,
-      password,
-      requestId,
+    const { data, error } = await supabaseClient.rpc('login_staff', {
+      p_user_code: staffCode,
+      p_password: password,
     });
 
-    const res = await fetch(`${SCRIPT_URL}?${params.toString()}`);
-    const data = await res.json();
+    if (error) {
+      throw error;
+    }
 
-    if (!data.success) {
-      showToast(`❌ ${data.error || 'เข้าสู่ระบบไม่สำเร็จ'}`, 'error');
+    if (!data || data.length === 0) {
+      showToast('❌ รหัสเจ้าหน้าที่หรือรหัสผ่านไม่ถูกต้อง', 'error');
 
       if (passwordInput) {
         passwordInput.value = '';
@@ -177,7 +183,14 @@ async function login() {
       return;
     }
 
-    currentUser = normalizeUser(data.user);
+    const user = data[0];
+
+    currentUser = normalizeUser({
+      code: user.user_code,
+      name: user.staff_name,
+      role: user.role,
+      center: user.center || '',
+    });
 
     localStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
 
@@ -186,32 +199,12 @@ async function login() {
     applyLoginState();
 
   } catch (error) {
-    console.error('Login error:', error);
-    showToast('❌ เชื่อมต่อระบบ Login ไม่สำเร็จ', 'error');
+    console.error('Supabase login error:', error);
+    showToast(`❌ ${error.message || 'เชื่อมต่อระบบ Login ไม่สำเร็จ'}`, 'error');
   }
 }
 
 async function logout() {
-  if (!currentUser) {
-    localStorage.removeItem(SESSION_KEY);
-    location.reload();
-    return;
-  }
-
-  const requestId = newRequestId('logout');
-
-  try {
-    const params = new URLSearchParams({
-      action: 'logout',
-      staffCode: currentUser.code,
-      requestId,
-    });
-
-    await fetch(`${SCRIPT_URL}?${params.toString()}`);
-  } catch (error) {
-    console.warn('Logout log failed:', error);
-  }
-
   localStorage.removeItem(SESSION_KEY);
   currentUser = null;
   location.reload();
@@ -226,29 +219,6 @@ function togglePasswordVisibility() {
   input.type = willShow ? 'text' : 'password';
   button.textContent = willShow ? 'ซ่อน' : 'แสดง';
   button.setAttribute('aria-label', willShow ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน');
-}
-
-function writeLoginLog(action, extra = {}) {
-  try {
-    const params = new URLSearchParams({
-      action: 'loginLog',
-      logAction: action,
-      staffCode: extra.staffCode || '',
-      staffName: extra.staffName || '',
-      role: extra.role || '',
-      center: extra.center || '',
-      reason: extra.reason || '',
-      device: navigator.userAgent || '',
-      timestamp: new Date().toISOString(),
-    });
-
-    fetch(`${SCRIPT_URL}?${params.toString()}`, {
-      method: 'GET',
-      mode: 'no-cors',
-    }).catch(() => {});
-  } catch (error) {
-    // ไม่ให้ log ล้มแล้วกระทบการใช้งานหลัก
-  }
 }
 
 function restoreSession() {
@@ -610,33 +580,43 @@ function loadStockCache() {
 // FETCH STOCK / TRANSFER
 // =====================
 async function fetchStock() {
-  setSyncStatus('กำลังโหลดสต็อก...', 'loading');
+  setSyncStatus('กำลังโหลดสต็อกจาก Supabase...', 'loading');
 
   try {
-    const res = await fetch(`${SCRIPT_URL}?action=getStock`);
-    const data = await res.json();
+    const { data, error } = await supabaseClient.rpc('get_stock_items');
 
-    if (data.stock) {
-      Object.entries(data.stock).forEach(([key, val]) => {
-        const sep = key.indexOf('::');
-        if (sep === -1) return;
-
-        const center = key.substring(0, sep);
-        const product = key.substring(sep + 2);
-        if (!localStock[center]) localStock[center] = {};
-        localStock[center][product] = Number(val) || 0;
-      });
-
-      refreshInBadges();
-      refreshOutInfo();
-      refreshTransferInfo();
-      saveStockCache();
-      setSyncStatus('โหลดสต็อกแล้ว', 'ready');
-      return;
+    if (error) {
+      throw error;
     }
 
-    setSyncStatus('ไม่พบข้อมูลสต็อก', 'error');
+    // reset localStock ก่อนเติมข้อมูลใหม่
+    localStock = {};
+    CENTERS.forEach((center) => {
+      localStock[center] = {};
+      PRODUCTS.forEach((product) => {
+        localStock[center][product] = 0;
+      });
+    });
+
+    (data || []).forEach((item) => {
+      const center = item.center;
+      const product = item.product;
+
+      if (!localStock[center]) {
+        localStock[center] = {};
+      }
+
+      localStock[center][product] = Number(item.qty) || 0;
+    });
+
+    refreshInBadges();
+    refreshOutInfo();
+    refreshTransferInfo();
+
+    setSyncStatus('โหลดสต็อกแล้ว', 'ready');
+
   } catch (error) {
+    console.error('Supabase stock error:', error);
     setSyncStatus('โหลดสต็อกไม่สำเร็จ', 'error');
   }
 }
@@ -648,21 +628,31 @@ async function fetchPendingTransfers() {
   if (box) box.innerHTML = '<div class="empty-state">กำลังโหลดรายการรอรับ...</div>';
 
   try {
-    const params = new URLSearchParams({
-      action: 'getTransfers',
-      status: 'pending',
-      center: currentUser.center,
-      staffCode: currentUser.code,
+    const { data, error } = await supabaseClient.rpc('get_pending_transfers', {
+      p_center: currentUser.center,
     });
-    const res = await fetch(`${SCRIPT_URL}?${params.toString()}`);
-    const data = await res.json();
-    pendingTransfers = Array.isArray(data.transfers) ? data.transfers : [];
-    updatePendingBadge(pendingTransfers.length);
+
+    if (error) {
+      throw error;
+    }
+
+    pendingTransfers = (data || []).map((item) => ({
+      transferId: item.transfer_id,
+      date: item.transfer_date || item.created_at,
+      fromCenter: item.from_center,
+      toCenter: item.to_center,
+      status: item.status,
+      person: item.created_by_name || item.created_by_code || '',
+      note: item.note || '',
+      items: item.items || [],
+    }));
+
     renderPendingTransfers();
+
   } catch (error) {
+    console.error('Supabase pending transfer error:', error);
     pendingTransfers = [];
-    updatePendingBadge(0);
-    renderPendingTransfers('ยังโหลดรายการ Transfer ไม่ได้ — ต้องเพิ่ม action getTransfers ใน Google Apps Script ก่อน');
+    renderPendingTransfers(error.message || 'โหลดรายการรอรับไม่สำเร็จ');
   }
 }
 
@@ -679,28 +669,178 @@ function setSyncStatus(text, state = 'loading') {
 // SUBMIT
 // =====================
 function submitByType(type) {
+  if (type === 'in') {
+    submitStockInSupabase();
+    return;
+  }
+
+  if (type === 'out') {
+    submitStockOutSupabase();
+    return;
+  }
+
   if (type === 'transfer') {
     submitTransfer();
     return;
   }
+
   submitForm(type);
+}
+
+async function submitStockInSupabase() {
+  if (!requirePermission('in')) return;
+
+  const btn = document.getElementById('btn-in');
+  if (!btn || btn.disabled) return;
+
+  const date = document.getElementById('in-date').value;
+  const center = document.getElementById('in-center').value;
+  const receiverName = document.getElementById('in-person').value.trim();
+  const note = document.getElementById('in-note').value.trim();
+  const requestId = formRequestIds.in;
+
+  if (!date || !center || !receiverName) {
+    showToast('⚠️ กรุณากรอกวันที่ ศูนย์ และชื่อผู้รับเข้า', 'error');
+    return;
+  }
+
+  const rows = document.querySelectorAll('#in-products .product-row');
+  const items = collectItemsFromRows(rows);
+
+  if (items.length === 0) {
+    showToast('⚠️ กรุณาเพิ่มรายการสินค้า', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  showToast('', 'loading', 'กำลังบันทึกรับเข้า...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('stock_in', {
+      p_request_id: requestId,
+      p_staff_code: currentUser.code,
+      p_date: date,
+      p_center: center,
+      p_receiver_name: receiverName,
+      p_note: note,
+      p_items: items,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'บันทึกรับเข้าไม่สำเร็จ');
+    }
+
+    if (data.duplicate === true) {
+      showToast('⚠️ รายการนี้ถูกบันทึกไปแล้ว ไม่บันทึกซ้ำ', 'error');
+      return;
+    }
+
+    updateLocalStock('in', center, items);
+
+    showToast('✅ บันทึกรับเข้าสำเร็จ', 'success');
+
+    formRequestIds.in = newRequestId('in');
+    resetForm('in');
+
+  } catch (error) {
+    console.error('Supabase stock_in error:', error);
+    showToast(`❌ ${error.message || 'บันทึกรับเข้าไม่สำเร็จ'}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function submitStockOutSupabase() {
+  if (!requirePermission('out')) return;
+
+  const btn = document.getElementById('btn-out') || document.querySelector('[data-submit="out"]');
+  if (!btn || btn.disabled) return;
+
+  const date = document.getElementById('out-date').value;
+  const center = document.getElementById('out-center').value;
+  const note = document.getElementById('out-note').value.trim();
+  const requestId = formRequestIds.out;
+
+  if (!date || !center) {
+    showToast('⚠️ กรุณากรอกวันที่และศูนย์ที่เบิก', 'error');
+    return;
+  }
+
+  if (!enforceOwnCenter('out', center)) return;
+
+  const rows = document.querySelectorAll('#out-products .product-row');
+  const items = collectItemsFromRows(rows);
+
+  if (items.length === 0) {
+    showToast('⚠️ กรุณาเพิ่มรายการสินค้าเบิกออก', 'error');
+    return;
+  }
+
+  const stockCheck = validateStockEnough(center, items);
+  if (!stockCheck.ok) {
+    showToast(stockCheck.message, 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  showToast('', 'loading', 'กำลังบันทึกเบิกออก...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('stock_out', {
+      p_request_id: requestId,
+      p_staff_code: currentUser.code,
+      p_date: date,
+      p_center: center,
+      p_note: note,
+      p_items: items,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'บันทึกเบิกออกไม่สำเร็จ');
+    }
+
+    if (data.duplicate === true) {
+      showToast('⚠️ รายการนี้ถูกบันทึกไปแล้ว ไม่บันทึกซ้ำ', 'error');
+      return;
+    }
+
+    updateLocalStock('out', center, items);
+
+    showToast('✅ บันทึกเบิกออกสำเร็จ', 'success');
+
+    formRequestIds.out = newRequestId('out');
+    resetForm('out');
+
+  } catch (error) {
+    console.error('Supabase stock_out error:', error);
+    showToast(`❌ ${error.message || 'บันทึกเบิกออกไม่สำเร็จ'}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function submitTransfer() {
   if (!requirePermission('transfer')) return;
 
-  const btn = document.getElementById('btn-transfer');
+  const btn = document.getElementById('btn-transfer') || document.querySelector('[data-submit="transfer"]');
   if (!btn || btn.disabled) return;
 
   const date = document.getElementById('transfer-date').value;
   const fromCenter = document.getElementById('transfer-from-center').value;
   const toCenter = document.getElementById('transfer-to-center').value;
-  const person = document.getElementById('transfer-person').value.trim();
   const note = document.getElementById('transfer-note').value.trim();
   const requestId = formRequestIds.transfer;
 
-  if (!date || !fromCenter || !toCenter || !person) {
-    showToast('⚠️ กรุณากรอกวันที่ ศูนย์ต้นทาง ศูนย์ปลายทาง และผู้ทำรายการ', 'error');
+  if (!date || !fromCenter || !toCenter) {
+    showToast('⚠️ กรุณากรอกวันที่ ศูนย์ต้นทาง และศูนย์ปลายทาง', 'error');
     return;
   }
 
@@ -729,41 +869,43 @@ async function submitTransfer() {
   showToast('', 'loading', 'กำลังสร้างรายการ Transfer...');
 
   try {
-    const params = new URLSearchParams({
-      action: 'createTransfer',
-      date,
-      fromCenter,
-      toCenter,
-      person: `${currentUser.name} (${currentUser.code})`,
-      note,
-      requestId,
-      transferId: requestId,
-      status: 'pending',
-      staffCode: currentUser.code,
-      staffName: currentUser.name,
-      staffRole: currentUser.role,
-      staffCenter: currentUser.center || '',
-      items: JSON.stringify(items),
+    const { data, error } = await supabaseClient.rpc('create_transfer', {
+      p_transfer_id: requestId,
+      p_staff_code: currentUser.code,
+      p_date: date,
+      p_from_center: fromCenter,
+      p_to_center: toCenter,
+      p_note: note,
+      p_items: items,
     });
 
-    const res = await fetch(`${SCRIPT_URL}?${params.toString()}`, {
-      method: 'GET',
-    });
+    if (error) {
+      throw error;
+    }
 
-    const data = await res.json();
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'สร้าง Transfer ไม่สำเร็จ');
+    }
 
-    if (!data.success) {
-      throw new Error(data.error || 'สร้าง Transfer ไม่สำเร็จ');
+    if (data.duplicate === true) {
+      showToast('⚠️ รายการนี้ถูกบันทึกไปแล้ว ไม่บันทึกซ้ำ', 'error');
+      return;
     }
 
     updateLocalStock('out', fromCenter, items);
+
     showToast('✅ สร้าง Transfer แล้ว รอศูนย์ปลายทางกดยืนยันรับ', 'success');
+
     formRequestIds.transfer = newRequestId('transfer');
     resetTransferForm();
 
+    if (canAccessTab('pending')) {
+      fetchPendingTransfers();
+    }
+
   } catch (error) {
-    console.error('Transfer error:', error);
-    showToast(`❌ ${error.message || 'สร้าง Transfer ไม่สำเร็จ กรุณาลองใหม่'}`, 'error');
+    console.error('Supabase create_transfer error:', error);
+    showToast(`❌ ${error.message || 'สร้าง Transfer ไม่สำเร็จ'}`, 'error');
   } finally {
     btn.disabled = false;
   }
@@ -968,12 +1110,14 @@ async function acceptTransfer(transferId) {
   }
 
   const toCenter = transfer.toCenter || transfer.to_center || transfer.destinationCenter || '';
-  if (toCenter !== currentUser.center) {
+
+  if (toCenter !== currentUser.center && currentUser.role !== 'admin') {
     showToast(`⛔ รับได้เฉพาะรายการที่ส่งเข้า ${currentUser.center}`, 'error');
     return;
   }
 
   const items = normalizeItems(transfer.items);
+
   if (!items.length) {
     showToast('❌ รายการนี้ไม่มีข้อมูลสินค้า', 'error');
     return;
@@ -982,33 +1126,43 @@ async function acceptTransfer(transferId) {
   showToast('', 'loading', 'กำลังยืนยันรับของ...');
 
   try {
-    const params = new URLSearchParams({
-      action: 'acceptTransfer',
-      transferId,
-      acceptedBy: `${currentUser.name} (${currentUser.code})`,
-      acceptedByCode: currentUser.code,
-      acceptedByName: currentUser.name,
-      acceptedByRole: currentUser.role,
-      acceptedCenter: currentUser.center,
-      items: JSON.stringify(items),
+    const { data, error } = await supabaseClient.rpc('accept_transfer', {
+      p_transfer_id: transferId,
+      p_staff_code: currentUser.code,
     });
 
-    await fetch(`${SCRIPT_URL}?${params.toString()}`, {
-      method: 'GET',
-      mode: 'no-cors',
-    });
+    if (error) {
+      throw error;
+    }
 
-    updateLocalStock('in', currentUser.center, items);
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'ยืนยันรับไม่สำเร็จ');
+    }
+
+    if (data.duplicate === true) {
+      showToast('⚠️ รายการนี้ถูกรับเข้าแล้ว ไม่เพิ่มซ้ำ', 'error');
+      fetchPendingTransfers();
+      return;
+    }
+
+    updateLocalStock('in', toCenter, items);
+
     pendingTransfers = pendingTransfers.filter((item, index) => {
       const id = item.transferId || item.transfer_id || item.requestId || item.id || `transfer-${index}`;
       return String(id) !== String(transferId);
     });
 
-    updatePendingBadge(pendingTransfers.length);
     renderPendingTransfers();
+
+    if (typeof updatePendingBadge === 'function') {
+      updatePendingBadge(pendingTransfers.length);
+    }
+
     showToast('✅ รับเข้าสต็อกเรียบร้อย', 'success');
+
   } catch (error) {
-    showToast('❌ ยืนยันรับไม่สำเร็จ กรุณาลองใหม่', 'error');
+    console.error('Supabase accept_transfer error:', error);
+    showToast(`❌ ${error.message || 'ยืนยันรับไม่สำเร็จ กรุณาลองใหม่'}`, 'error');
   }
 }
 
