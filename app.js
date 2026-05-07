@@ -36,10 +36,10 @@ const supabaseClient = window.supabase.createClient(
 let currentUser = null;
 
 const ROLE_PERMISSIONS = {
-  stock_receiver: ['in'],
-  center_staff: ['out', 'transfer', 'pending'],
-  committee: ['committee'],
-  admin: ['in', 'out', 'transfer', 'pending', 'committee'],
+  stock_receiver: ['in', 'stock'],
+  center_staff: ['out', 'transfer', 'pending', 'stock'],
+  committee: ['stock'],
+  admin: ['in', 'out', 'transfer', 'pending', 'stock', 'committee'],
 };
 
 function getPermissionsForRole(role) {
@@ -75,6 +75,7 @@ CENTERS.forEach((center) => {
 });
 
 let pendingTransfers = [];
+let stockViewTransfers = [];
 
 const formRequestIds = {
   in: newRequestId('in'),
@@ -87,6 +88,7 @@ const modeLabels = {
   out: 'เบิกสินค้าออก',
   transfer: 'Transfer / ยืมของ',
   pending: 'ยืนยันรับของเข้า',
+  stock: 'ดู Stock',
 };
 
 function newRequestId(type) {
@@ -128,6 +130,21 @@ function bindStaticEvents() {
   });
   document.getElementById('login-password')?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') login();
+  });
+
+  document.getElementById('stock-center-filter')?.addEventListener('change', () => {
+    renderStockDashboard();
+    fetchStockViewTransfers();
+  });
+
+  document.getElementById('stock-product-filter')?.addEventListener('change', () => {
+    renderStockDashboard();
+    renderStockViewTransfers();
+  });
+
+  document.getElementById('btn-refresh-stock-view')?.addEventListener('click', () => {
+    fetchStock();
+    fetchStockViewTransfers();
   });
   document.getElementById('toggle-password')?.addEventListener('click', togglePasswordVisibility);
   document.getElementById('btn-logout')?.addEventListener('click', logout);
@@ -358,7 +375,7 @@ function enforceOwnCenter(type, center) {
 // TABS
 // =====================
 function switchTab(tab, force = false) {
-  if (!['in', 'out', 'transfer', 'pending'].includes(tab)) return;
+  if (!['in', 'out', 'transfer', 'pending', 'stock'].includes(tab)) return;
   if (!force && !requirePermission(tab)) return;
 
   document.querySelectorAll('[data-panel]').forEach((panel) => {
@@ -370,9 +387,16 @@ function switchTab(tab, force = false) {
   });
 
   const label = document.getElementById('active-mode-label');
-  if (label) label.textContent = modeLabels[tab];
+  if (label) label.textContent = modeLabels[tab] || '';
 
-  if (tab === 'pending') fetchPendingTransfers();
+  if (tab === 'pending') {
+    fetchPendingTransfers();
+  }
+
+  if (tab === 'stock') {
+    renderStockDashboard();
+    fetchStockViewTransfers();
+  }
 }
 
 // =====================
@@ -612,6 +636,7 @@ async function fetchStock() {
     refreshInBadges();
     refreshOutInfo();
     refreshTransferInfo();
+    renderStockDashboard();
 
     setSyncStatus('โหลดสต็อกแล้ว', 'ready');
 
@@ -1164,6 +1189,142 @@ async function acceptTransfer(transferId) {
     console.error('Supabase accept_transfer error:', error);
     showToast(`❌ ${error.message || 'ยืนยันรับไม่สำเร็จ กรุณาลองใหม่'}`, 'error');
   }
+}
+
+function getStockCenterFilter() {
+  return document.getElementById('stock-center-filter')?.value || '';
+}
+
+function getStockProductFilter() {
+  return document.getElementById('stock-product-filter')?.value || '';
+}
+
+function renderStockDashboard() {
+  const box = document.getElementById('stock-dashboard-grid');
+  if (!box) return;
+
+  const selectedCenter = getStockCenterFilter();
+  const selectedProduct = getStockProductFilter();
+
+  const centersToShow = selectedCenter ? [selectedCenter] : CENTERS;
+  const productsToShow = selectedProduct ? [selectedProduct] : PRODUCTS;
+
+  const html = centersToShow.map((center) => {
+    const stock = localStock[center] || {};
+
+    const rows = productsToShow.map((product) => {
+      const qty = Number(stock[product]) || 0;
+      const cls = qty <= 0 ? 'empty' : qty <= 5 ? 'low' : 'ok';
+
+      return `
+        <div class="stock-dashboard-row">
+          <span>${escapeHtml(product)}</span>
+          <strong class="${cls}">${qty} ชิ้น</strong>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <article class="stock-dashboard-card">
+        <div class="stock-dashboard-head">
+          <strong>${escapeHtml(center)}</strong>
+        </div>
+        <div class="stock-dashboard-body">
+          ${rows}
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  box.innerHTML = html || '<div class="empty-state">ไม่มีข้อมูลสต็อก</div>';
+}
+
+async function fetchStockViewTransfers() {
+  const box = document.getElementById('stock-transfer-list');
+  if (!box) return;
+
+  const selectedCenter = getStockCenterFilter();
+
+  box.innerHTML = '<div class="empty-state">กำลังโหลดรายการ Transfer...</div>';
+
+  try {
+    const { data, error } = await supabaseClient.rpc('get_pending_transfers', {
+      p_center: selectedCenter,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    stockViewTransfers = (data || []).map((item) => ({
+      transferId: item.transfer_id,
+      date: item.transfer_date || item.created_at,
+      fromCenter: item.from_center,
+      toCenter: item.to_center,
+      status: item.status,
+      person: item.created_by_name || item.created_by_code || '',
+      note: item.note || '',
+      items: item.items || [],
+    }));
+
+    renderStockViewTransfers();
+
+  } catch (error) {
+    console.error('Stock view transfer error:', error);
+    stockViewTransfers = [];
+    box.innerHTML = `<div class="empty-state error-state">${escapeHtml(error.message || 'โหลดรายการ Transfer ไม่สำเร็จ')}</div>`;
+  }
+}
+
+function renderStockViewTransfers() {
+  const box = document.getElementById('stock-transfer-list');
+  if (!box) return;
+
+  const selectedProduct = getStockProductFilter();
+
+  const filteredTransfers = stockViewTransfers
+    .map((transfer) => {
+      const items = normalizeItems(transfer.items);
+      const filteredItems = selectedProduct
+        ? items.filter((item) => item.product === selectedProduct)
+        : items;
+
+      return {
+        ...transfer,
+        items: filteredItems,
+      };
+    })
+    .filter((transfer) => normalizeItems(transfer.items).length > 0);
+
+  if (!filteredTransfers.length) {
+    box.innerHTML = '<div class="empty-state">ไม่มีรายการ Transfer ที่ตรงกับฟิลเตอร์</div>';
+    return;
+  }
+
+  box.innerHTML = filteredTransfers.map((transfer) => {
+    const items = normalizeItems(transfer.items);
+    const itemText = items.length
+      ? items.map(item => `${escapeHtml(item.product)} ${Number(item.qty) || 0} ชิ้น`).join(' / ')
+      : 'ไม่มีรายละเอียดสินค้า';
+
+    return `
+      <article class="stock-transfer-card">
+        <div class="stock-transfer-top">
+          <strong>${escapeHtml(transfer.fromCenter)} → ${escapeHtml(transfer.toCenter)}</strong>
+          <span class="transfer-status">รอรับ</span>
+        </div>
+
+        <div class="stock-transfer-detail">
+          <p>${itemText}</p>
+          <small>
+            วันที่: ${escapeHtml(transfer.date || '-')}
+            ${transfer.person ? ` • ผู้ทำรายการ: ${escapeHtml(transfer.person)}` : ''}
+          </small>
+          ${transfer.note ? `<small>หมายเหตุ: ${escapeHtml(transfer.note)}</small>` : ''}
+        </div>
+      </article>
+    `;
+  }).join('');
 }
 
 // =====================

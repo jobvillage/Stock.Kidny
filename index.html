@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260506-supabase-final1" />
+  <link rel="stylesheet" href="style.css?v=20260507-tabbar-compact1" />
 </head>
 <body>
   <section class="login-screen" id="login-screen">
@@ -78,6 +78,10 @@
           <span class="segment-icon">✅</span>
           <span>รับของ</span>
           <span class="segment-badge" id="pending-badge" hidden>0</span>
+        </button>
+        <button class="segment" type="button" data-tab="stock" id="tab-stock">
+          <span class="segment-icon">📦</span>
+          <span>Stock</span>
         </button>
       </nav>
 
@@ -250,6 +254,69 @@
         </button>
       </section>
 
+      <section class="panel" id="panel-stock" data-panel="stock">
+        <div class="panel-title">
+          <span class="title-icon">📦</span>
+          <div>
+            <h2>ดู Stock ทุกศูนย์</h2>
+            <p>ตรวจสอบยอดคงเหลือและรายการ Transfer ที่กำลังรอรับ</p>
+          </div>
+        </div>
+
+        <div class="stock-view-toolbar stock-view-toolbar-2">
+          <div class="field-group">
+            <label for="stock-center-filter">เลือกศูนย์</label>
+            <select id="stock-center-filter">
+              <option value="">ทุกศูนย์</option>
+              <option value="ไตบน">ไตบน</option>
+              <option value="ไตล่าง">ไตล่าง</option>
+              <option value="ไตดี">ไตดี</option>
+            </select>
+          </div>
+
+          <div class="field-group">
+            <label for="stock-product-filter">เลือกสินค้า</label>
+            <select id="stock-product-filter">
+              <option value="">ทุกสินค้า</option>
+              <option value="K3 Ca 3.5">K3 Ca 3.5</option>
+              <option value="K3 Ca 2.5">K3 Ca 2.5</option>
+              <option value="K2 Ca 2.5">K2 Ca 2.5</option>
+              <option value="Hemo B">Hemo B</option>
+              <option value="NSS">NSS</option>
+              <option value="น้ำยา On-line">น้ำยา On-line</option>
+              <option value="Citrosteri">Citrosteri</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="stock-view-section">
+          <div class="products-header">
+            <div>
+              <span>สต็อกคงเหลือ</span>
+              <small>แสดงยอดตามศูนย์ที่เลือก</small>
+            </div>
+          </div>
+
+          <div class="stock-dashboard-grid" id="stock-dashboard-grid">
+            <div class="empty-state">กำลังโหลดข้อมูลสต็อก...</div>
+          </div>
+        </div>
+
+        <div class="stock-view-section">
+          <div class="products-header">
+            <div>
+              <span>รายการ Transfer ที่กำลังรอรับ</span>
+              <small>แสดงของที่โอนออกแล้ว แต่ศูนย์ปลายทางยังไม่ได้กดรับ</small>
+            </div>
+            <button class="btn-add-row" type="button" id="btn-refresh-stock-view">รีเฟรช</button>
+          </div>
+
+          <div class="stock-transfer-list" id="stock-transfer-list">
+            <div class="empty-state">กำลังโหลดรายการ Transfer...</div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel panel-pending" id="panel-pending" data-panel="pending">
         <div class="panel-title">
           <span class="title-icon pending">✅</span>
@@ -273,6 +340,6 @@
   <div class="toast" id="toast" role="status" aria-live="assertive"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260506-supabase-final1" defer></script>
+  <script src="app.js?v=20260507-stock-filter1" defer></script>
 </body>
 </html>
