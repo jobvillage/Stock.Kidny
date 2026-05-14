@@ -7,8 +7,10 @@
   <title>ระบบบันทึกสต็อกสินค้า</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="icon" href="data:,">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260507-tabbar-compact1" />
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=20260514-deploy1">
 </head>
 <body>
   <section class="login-screen" id="login-screen">
@@ -28,7 +30,7 @@
           <button class="btn-toggle-password" id="toggle-password" type="button" aria-label="แสดงรหัสผ่าน">แสดง</button>
         </div>
 
-        <button class="btn-login" id="btn-login" type="button">เข้าสู่ระบบ</button>
+        <button class="btn-login" id="btn-login" type="button" onclick="login()">เข้าสู่ระบบ</button>
       </div>
     </div>
   </section>
@@ -39,7 +41,7 @@
       <div class="header-text">
         <p class="eyebrow">Stock Management</p>
         <h1>ระบบบันทึกสต็อกสินค้า</h1>
-        <p class="subtitle">บันทึกรับเข้า เบิกออก และโอนยืมสินค้าระหว่างศูนย์</p>
+        <p class="subtitle">บันทึกรับเข้า เบิกออก และเปิด Purchase Order</p>
       </div>
     </header>
 
@@ -68,17 +70,28 @@
         </button>
         <button class="segment" type="button" data-tab="out" id="tab-out">
           <span class="segment-icon">📤</span>
-          <span>เบิกออก</span>
+          <span>ใบขอเบิก</span>
+        </button>
+        <button class="segment" type="button" data-tab="request_status" id="tab-request-status">
+          <span class="segment-icon">✅</span>
+          <span>สถานะใบขอเบิก</span>
+          <span class="segment-badge" id="request-status-badge" hidden>0</span>
         </button>
         <button class="segment" type="button" data-tab="transfer" id="tab-transfer">
-          <span class="segment-icon">🔁</span>
-          <span>Transfer</span>
+          <span class="segment-icon">📝</span>
+          <span>เปิด PO</span>
+        </button>
+        <button class="segment" type="button" data-tab="po_status" id="tab-po-status">
+          <span class="segment-icon">📄</span>
+          <span>สถานะ PO</span>
+          <span class="segment-badge" id="po-status-badge" hidden>0</span>
         </button>
         <button class="segment" type="button" data-tab="pending" id="tab-pending">
-          <span class="segment-icon">✅</span>
-          <span>รับของ</span>
+          <span class="segment-icon">📋</span>
+          <span>รายการขอเบิก</span>
           <span class="segment-badge" id="pending-badge" hidden>0</span>
         </button>
+
         <button class="segment" type="button" data-tab="stock" id="tab-stock">
           <span class="segment-icon">📦</span>
           <span>Stock</span>
@@ -106,10 +119,9 @@
           <div class="field-group">
             <label for="in-center">ระบุศูนย์</label>
             <select id="in-center">
-              <option value="">— เลือกศูนย์ —</option>
-              <option value="ไตบน">ไตบน</option>
-              <option value="ไตล่าง">ไตล่าง</option>
-              <option value="ไตดี">ไตดี</option>
+              <option value="">— เลือกสต็อก —</option>
+              <option value="สต็อกใหญ่">สต็อกใหญ่</option>
+              <option value="Hub Admin">Hub Admin</option>
             </select>
           </div>
           <div class="field-group">
@@ -141,6 +153,26 @@
           <span>📥</span>
           <span>บันทึกการรับสินค้า</span>
         </button>
+      </section>
+
+      <section class="panel" id="panel-request-status" data-panel="request_status">
+        <div class="panel-title">
+          <span class="title-icon pending">✅</span>
+          <div>
+            <h2>สถานะใบขอเบิก</h2>
+            <p>แสดงใบเบิกที่รอดำเนินการ และใบที่จัดเตรียมแล้วภายใน 1 วันล่าสุด</p>
+          </div>
+        </div>
+
+        <div class="pending-toolbar">
+          <button class="btn-add-row pending-refresh" type="button" id="btn-refresh-request-status">
+            รีเฟรชรายการ
+          </button>
+        </div>
+
+        <div id="request-status-list" class="pending-list">
+          <div class="empty-state">ยังไม่มีใบเบิกที่จัดเตรียมเรียบร้อย</div>
+        </div>
       </section>
 
       <section class="panel panel-out" id="panel-out" data-panel="out">
@@ -196,62 +228,71 @@
 
       <section class="panel panel-transfer" id="panel-transfer" data-panel="transfer">
         <div class="panel-title">
-          <span class="title-icon transfer">🔁</span>
+          <span class="title-icon transfer">🏬</span>
           <div>
-            <h2>Transfer / ยืมของระหว่างศูนย์</h2>
-            <p>โอนออกจากศูนย์ต้นทาง แล้วรอศูนย์ปลายทางกดยืนยันรับก่อนเข้าสต็อก</p>
+            <h2>Hub Stock</h2>
+            <p>แสดงสต็อกของ Hub Admin สำหรับจัดของให้ไตบนและไตล่าง</p>
           </div>
         </div>
-
-        <div class="form-grid">
-          <div class="field-group">
-            <label for="transfer-date">วันที่ทำรายการ</label>
-            <input type="date" id="transfer-date" />
-          </div>
-          <div class="field-group">
-            <label for="transfer-person">ผู้ทำรายการ</label>
-            <input type="text" id="transfer-person" placeholder="ชื่อผู้โอน / ผู้ยืม" autocomplete="name" />
-          </div>
-          <div class="field-group">
-            <label for="transfer-from-center">ศูนย์ต้นทาง</label>
-            <select id="transfer-from-center">
-              <option value="">— เลือกศูนย์ต้นทาง —</option>
-              <option value="ไตบน">ไตบน</option>
-              <option value="ไตล่าง">ไตล่าง</option>
-              <option value="ไตดี">ไตดี</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label for="transfer-to-center">ศูนย์ปลายทาง</label>
-            <select id="transfer-to-center">
-              <option value="">— เลือกศูนย์ปลายทาง —</option>
-              <option value="ไตบน">ไตบน</option>
-              <option value="ไตล่าง">ไตล่าง</option>
-              <option value="ไตดี">ไตดี</option>
-            </select>
-          </div>
-          <div class="field-group field-group-full">
-            <label for="transfer-note">หมายเหตุ</label>
-            <input type="text" id="transfer-note" placeholder="เช่น ยืมชั่วคราว / คืนของ / เหตุผลการโอน" />
-          </div>
-        </div>
-
-        <div class="section-divider"></div>
 
         <div class="products-header">
           <div>
-            <span>รายการสินค้า Transfer</span>
-            <small>ระบบจะเช็กจำนวนคงเหลือของศูนย์ต้นทาง</small>
+            <span>สต็อก Hub Admin</span>
+            <small>รายการคงเหลือที่ใช้จัดของให้ Staff</small>
           </div>
-          <button class="btn-add-row transfer" type="button" data-add-row="transfer">+ เพิ่มรายการ</button>
+          <button class="btn-add-row transfer" type="button" id="btn-refresh-hub-stock">
+            รีเฟรช
+          </button>
         </div>
 
-        <div id="transfer-products" class="product-list"></div>
+        <div class="stock-view-toolbar stock-view-toolbar-2">
+          <div class="field-group">
+            <label for="hub-product-filter">เลือกสินค้า</label>
+            <select id="hub-product-filter">
+              <option value="">ทุกสินค้า</option>
+              <option value="K3 Ca 3.5">K3 Ca 3.5</option>
+              <option value="K3 Ca 2.5">K3 Ca 2.5</option>
+              <option value="K2 Ca 2.5">K2 Ca 2.5</option>
+              <option value="Hemo B">Hemo B</option>
+              <option value="NSS">NSS</option>
+              <option value="น้ำยา On-line">น้ำยา On-line</option>
+              <option value="Citrosteri">Citrosteri</option>
+            </select>
+          </div>
+        </div>
 
-        <button class="btn-submit btn-submit-transfer" id="btn-transfer" type="button" data-submit="transfer">
-          <span>🔁</span>
-          <span>สร้างรายการ Transfer</span>
-        </button>
+        <div class="stock-dashboard-grid" id="hub-stock-dashboard"></div>
+      </section>
+
+      <section class="panel" id="panel-po-status" data-panel="po_status">
+        <div class="po-search-box">
+          <label for="po-status-search">ค้นหาเลข PO</label>
+          <input
+            type="text"
+            id="po-status-search"
+            class="po-search-input"
+            placeholder="เช่น PO-20260514-001"
+            oninput="fetchPoStatus()"
+          />
+        </div>
+
+        <div class="panel-title">
+          <span class="title-icon">📄</span>
+          <div>
+            <h2>สถานะ PO</h2>
+            <p>ตรวจสอบรายการ PO ที่เปิดแล้ว และสถานะการรับสินค้า</p>
+          </div>
+        </div>
+
+        <div class="pending-toolbar">
+          <button class="btn-add-row pending-refresh" type="button" id="btn-refresh-po-status">
+            รีเฟรชรายการ
+          </button>
+        </div>
+
+        <div id="po-status-list" class="pending-list">
+          <div class="empty-state">กำลังโหลดสถานะ PO...</div>
+        </div>
       </section>
 
       <section class="panel" id="panel-stock" data-panel="stock">
@@ -267,10 +308,9 @@
           <div class="field-group">
             <label for="stock-center-filter">เลือกศูนย์</label>
             <select id="stock-center-filter">
-              <option value="">ทุกศูนย์</option>
-              <option value="ไตบน">ไตบน</option>
-              <option value="ไตล่าง">ไตล่าง</option>
-              <option value="ไตดี">ไตดี</option>
+              <option value="">ทุกสต็อก</option>
+              <option value="สต็อกใหญ่">สต็อกใหญ่</option>
+              <option value="Hub Admin">Hub Admin</option>
             </select>
           </div>
 
@@ -301,28 +341,14 @@
             <div class="empty-state">กำลังโหลดข้อมูลสต็อก...</div>
           </div>
         </div>
-
-        <div class="stock-view-section">
-          <div class="products-header">
-            <div>
-              <span>รายการ Transfer ที่กำลังรอรับ</span>
-              <small>แสดงของที่โอนออกแล้ว แต่ศูนย์ปลายทางยังไม่ได้กดรับ</small>
-            </div>
-            <button class="btn-add-row" type="button" id="btn-refresh-stock-view">รีเฟรช</button>
-          </div>
-
-          <div class="stock-transfer-list" id="stock-transfer-list">
-            <div class="empty-state">กำลังโหลดรายการ Transfer...</div>
-          </div>
-        </div>
       </section>
 
       <section class="panel panel-pending" id="panel-pending" data-panel="pending">
         <div class="panel-title">
           <span class="title-icon pending">✅</span>
           <div>
-            <h2>รายการรอยืนยันรับเข้า</h2>
-            <p>กดรับเมื่อศูนย์ของคุณได้รับของแล้ว จึงจะเพิ่มเข้าสต็อก</p>
+            <h2>รายการขอเบิก</h2>
+            <p>รายการใบเบิกที่ Staff ส่งมาให้ Admin ตรวจสอบและจัดของ</p>
           </div>
         </div>
 
@@ -339,7 +365,16 @@
 
   <div class="toast" id="toast" role="status" aria-live="assertive"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20260507-password-text1" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
+<script src="js/utils.js?v=20260514-deploy1" defer></script>
+<script src="js/supabase.js?v=20260514-deploy1" defer></script>
+<script src="js/auth.js?v=20260514-deploy1" defer></script>
+<script src="js/db.js?v=20260514-deploy1" defer></script>
+<script src="js/stock.js?v=20260514-deploy1" defer></script>
+<script src="js/transfer.js?v=20260514-deploy1" defer></script>
+<script src="js/ui.js?v=20260514-deploy1" defer></script>
+<script src="js/app.js?v=20260514-deploy1" defer></script>
 </body>
 </html>
