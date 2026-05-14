@@ -63,7 +63,7 @@
         <span class="overview-pill" id="sync-status">กำลังโหลดสต็อก...</span>
       </section>
 
-      <nav class="segmented-control segmented-control-4" aria-label="เลือกประเภทการบันทึก">
+      <nav class="segmented-control segmented-control-4 mobile-two-row-tabs" aria-label="เลือกประเภทการบันทึก">
         <button class="segment is-active" type="button" data-tab="in" id="tab-in">
           <span class="segment-icon">📥</span>
           <span>รับเข้า</span>
@@ -250,13 +250,6 @@
             <label for="hub-product-filter">เลือกสินค้า</label>
             <select id="hub-product-filter">
               <option value="">ทุกสินค้า</option>
-              <option value="K3 Ca 3.5">K3 Ca 3.5</option>
-              <option value="K3 Ca 2.5">K3 Ca 2.5</option>
-              <option value="K2 Ca 2.5">K2 Ca 2.5</option>
-              <option value="Hemo B">Hemo B</option>
-              <option value="NSS">NSS</option>
-              <option value="น้ำยา On-line">น้ำยา On-line</option>
-              <option value="Citrosteri">Citrosteri</option>
             </select>
           </div>
         </div>
@@ -318,13 +311,6 @@
             <label for="stock-product-filter">เลือกสินค้า</label>
             <select id="stock-product-filter">
               <option value="">ทุกสินค้า</option>
-              <option value="K3 Ca 3.5">K3 Ca 3.5</option>
-              <option value="K3 Ca 2.5">K3 Ca 2.5</option>
-              <option value="K2 Ca 2.5">K2 Ca 2.5</option>
-              <option value="Hemo B">Hemo B</option>
-              <option value="NSS">NSS</option>
-              <option value="น้ำยา On-line">น้ำยา On-line</option>
-              <option value="Citrosteri">Citrosteri</option>
             </select>
           </div>
         </div>
@@ -337,11 +323,14 @@
             </div>
           </div>
 
-          <div class="stock-dashboard-grid" id="stock-dashboard-grid">
-            <div class="empty-state">กำลังโหลดข้อมูลสต็อก...</div>
+          <div class="stock-table-scroll">
+            <div class="stock-dashboard-grid" id="stock-dashboard-grid">
+              <div class="empty-state">กำลังโหลดข้อมูลสต็อก...</div>
+            </div>
           </div>
         </div>
       </section>
+   
 
       <section class="panel panel-pending" id="panel-pending" data-panel="pending">
         <div class="panel-title">

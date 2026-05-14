@@ -304,8 +304,8 @@ button {
 
 .field-group input,
 .field-group select,
-.product-row input,
-.product-row select {
+.product-row > input,
+.product-row > select {
   width: 100%;
   min-height: 48px;
   color: var(--text);
@@ -329,8 +329,8 @@ button {
 
 .field-group input:focus,
 .field-group select:focus,
-.product-row input:focus,
-.product-row select:focus {
+.product-row > input:focus,
+.product-row > select:focus {
   background: rgba(255,255,255,0.98);
   border-color: rgba(22, 199, 132, 0.78);
   box-shadow: 0 0 0 4px rgba(22, 199, 132, 0.12);
@@ -338,8 +338,8 @@ button {
 
 .panel-out .field-group input:focus,
 .panel-out .field-group select:focus,
-.panel-out .product-row input:focus,
-.panel-out .product-row select:focus {
+.panel-out .product-row > input:focus,
+.panel-out .product-row > select:focus {
   border-color: rgba(255, 138, 52, 0.82);
   box-shadow: 0 0 0 4px rgba(255, 138, 52, 0.14);
 }
@@ -721,7 +721,7 @@ button {
     display: inline-block;
   }
 
-  .product-row.row-in input {
+  .product-row.row-in > input {
     grid-area: qty;
   }
 
@@ -1478,4 +1478,750 @@ button {
   .stock-view-toolbar-2 {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* ===== Tom Select ===== */
+.ts-wrapper {
+  width: 100%;
+}
+
+.ts-wrapper.single .ts-control {
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.78);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  box-shadow: none;
+}
+
+.ts-wrapper.single .ts-control input {
+  margin: 0;
+  padding: 0;
+}
+
+.ts-wrapper.single .ts-control,
+.ts-wrapper.single .ts-control input {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.ts-dropdown {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.ts-dropdown .ts-dropdown-content {
+  max-height: 200px;   /* ประมาณ 6 รายการ */
+  overflow-y: auto;
+}
+
+.ts-dropdown .option {
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+/* ซ่อนตัวเลือกว่างใน dropdown ของ Tom Select */
+.ts-dropdown .option[data-value=""] {
+  display: none !important;
+}
+
+/* สีตัวหนังสือที่พิมพ์จริงให้เข้มปกติ */
+.ts-wrapper.single .ts-control input {
+  color: var(--text);
+}
+
+.ts-wrapper.single .ts-control input::placeholder {
+  color: #9aa2b1 !important;
+  opacity: 1 !important;
+}
+
+.ts-dropdown .option[data-value=""] {
+  display: none !important;
+}
+
+/* ===== Stock Request / Pending Pick ===== */
+.stock-request-card {
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.stock-request-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.stock-request-head strong {
+  display: block;
+  font-size: 17px;
+  word-break: break-word;
+}
+
+.request-status-pill {
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: var(--accent-in-dark);
+  background: rgba(22, 199, 132, 0.12);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stock-request-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.stock-request-meta div,
+.stock-request-note {
+  border-radius: 18px;
+  background: rgba(23, 32, 51, 0.04);
+  padding: 11px 12px;
+}
+
+.stock-request-meta span,
+.stock-request-note span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.stock-request-meta strong {
+  font-size: 14px;
+}
+
+.stock-request-note {
+  margin-bottom: 14px;
+}
+
+.stock-request-note p {
+  font-size: 14px;
+}
+
+.stock-request-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.pick-item-row {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.76);
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.pick-item-name strong {
+  display: block;
+  font-size: 15px;
+}
+
+.pick-item-name small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.pick-item-qty label {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 5px;
+  text-align: center;
+}
+
+.pick-item-qty input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 6px 8px;
+  text-align: center;
+  font-weight: 700;
+  outline: none;
+}
+
+.pick-item-qty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.stock-request-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.btn-request-secondary,
+.btn-request-primary {
+  min-height: 46px;
+  border: 0;
+  border-radius: 16px;
+  font-weight: 700;
+}
+
+.btn-request-secondary {
+  color: var(--text);
+  background: rgba(23, 32, 51, 0.07);
+}
+
+.btn-request-primary {
+  color: #fff;
+  background: linear-gradient(145deg, #18d891, #0ca66a);
+}
+
+@media (max-width: 640px) {
+  .stock-request-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .pick-item-row {
+    grid-template-columns: 1fr 110px;
+  }
+
+  .stock-request-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pick-qty-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prepared-qty-input {
+  width: 72px;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 6px 8px;
+  text-align: center;
+  font-weight: 700;
+  outline: none;
+  background: #fff;
+}
+
+.prepared-qty-input[readonly] {
+  background: rgba(23, 32, 51, 0.04);
+  color: var(--text);
+}
+
+.btn-edit-qty {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(23, 32, 51, 0.06);
+  color: #9aa2b1;
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.btn-edit-qty.is-editing {
+  background: rgba(22, 199, 132, 0.12);
+  color: var(--accent-in-dark);
+}
+
+/* ===== Hub Stock Table ===== */
+.hub-stock-table {
+  border-radius: 22px;
+  background: rgba(255,255,255,0.82);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.hub-stock-head,
+.hub-stock-row {
+  display: grid;
+  grid-template-columns: 1fr 90px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.hub-stock-head {
+  background: rgba(23, 32, 51, 0.05);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.hub-stock-head-qty {
+  text-align: right;
+}
+
+.hub-stock-row {
+  border-top: 1px solid var(--border);
+}
+
+.hub-stock-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hub-stock-qty {
+  text-align: right;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.hub-stock-qty.ok {
+  color: var(--accent-in-dark);
+}
+
+.hub-stock-qty.low {
+  color: var(--accent-out-dark);
+}
+
+.hub-stock-qty.empty {
+  color: var(--danger);
+}
+
+/* ===== Stock Table ===== */
+.stock-table-main {
+  border-radius: 22px;
+  background: rgba(255,255,255,0.86);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.stock-table-head,
+.stock-table-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 90px 80px;
+  align-items: center;
+  gap: 5px;
+  padding: 11px 16px;
+}
+
+.stock-table-head {
+  background: rgba(23, 32, 51, 0.06);
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.stock-table-section {
+  border-top: 1px solid var(--border);
+}
+
+.stock-table-title {
+  padding: 12px 16px;
+  background: rgba(23, 32, 51, 0.035);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.stock-table-row {
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.stock-table-product {
+  font-weight: 600;
+}
+
+.stock-table-qty,
+.stock-table-po {
+  text-align: center;
+  font-weight: 700;
+}
+
+.stock-table-po {
+  color: var(--accent-out-dark);
+}
+
+@media (max-width: 520px) {
+  .stock-table-head,
+  .stock-table-row {
+    grid-template-columns: 1fr 64px 64px;
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .stock-table-head {
+    font-size: 11px;
+  }
+
+  .stock-table-row {
+    font-size: 13px;
+  }
+}
+
+/* ให้ฟิลเตอร์ในหน้า Hub Stock ยาวเต็มแถว */
+#panel-transfer .stock-view-toolbar {
+  grid-template-columns: 1fr !important;
+}
+
+#panel-transfer .field-group {
+  width: 100%;
+}
+
+.ts-dropdown {
+  z-index: 9999 !important;
+}
+
+/* ===== PO Status Item Table ===== */
+.po-items-table {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.78);
+}
+
+.po-items-head,
+.po-item-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 60px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.po-items-head div:nth-child(2),
+.po-item-qty {
+  text-align: center;
+}
+
+.po-items-head div:nth-child(3),
+.po-item-unit {
+  text-align: center;
+}
+
+.po-items-head {
+  background: rgba(23, 32, 51, 0.06);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.po-item-row {
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.po-item-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.po-item-qty {
+  text-align: center;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.po-item-unit {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .po-items-head,
+  .po-item-row {
+    grid-template-columns: 1fr 58px 44px;
+    padding: 9px 10px;
+    font-size: 13px;
+  }
+}
+
+.po-status-box {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.po-status-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-po-edit {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 11px;
+  color: var(--text-muted);
+  background: rgba(23, 32, 51, 0.06);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.po-edited-stamp {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.po-edit-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 38px;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.po-edit-row select,
+.po-edit-row input {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.po-edit-qty {
+  text-align: center;
+  font-weight: 700;
+}
+
+.po-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 12px;
+}
+
+/* แยกกล่องแต่ละ PO ให้ชัดเจน */
+.stock-request-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  padding: 18px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+/* ไม่ให้ตารางรายการสินค้าชนขอบกล่อง */
+.stock-request-items {
+  margin-top: 16px;
+}
+
+/* ให้ตารางสินค้าอยู่ในกล่องแบบสวย */
+.po-items-table {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* แยกกล่องแต่ละ PO ให้เห็นชัด */
+#po-status-list {
+  display: grid;
+  gap: 20px;
+}
+
+.btn-po-receive,
+.btn-po-receive-secondary {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.btn-po-receive {
+  color: #fff;
+  background: linear-gradient(145deg, #18d891, #0ca66a);
+}
+
+.btn-po-receive-secondary {
+  color: var(--accent-in-dark);
+  background: rgba(22, 199, 132, 0.12);
+}
+
+.po-partial-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 70px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.po-partial-qty {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px 8px;
+  text-align: center;
+  font-weight: 700;
+  outline: none;
+}
+
+.po-receive-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.po-receive-actions .btn-po-receive,
+.po-receive-actions .btn-po-receive-secondary {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 16px;
+}
+
+.po-partial-head,
+.po-partial-row {
+  grid-template-columns: 1fr 80px 70px 80px !important;
+}
+
+.btn-save-partial-line {
+  min-height: 36px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(22, 199, 132, 0.12);
+  color: var(--accent-in-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.po-receive-actions.is-partial-mode {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.btn-po-finish {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(23, 32, 51, 0.08);
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ซ่อนปุ่มรับเข้า ตอนอยู่ในโหมดแก้ไข PO */
+.stock-request-card.is-editing-po .po-receive-actions {
+  display: none !important;
+}
+.po-receive-actions.is-partial-mode {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.po-search-box {
+  margin: 14px 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.po-search-box label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.po-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #dbe3ef;
+  border-radius: 18px;
+  padding: 14px 16px;
+  font-size: 15px;
+  outline: none;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.po-search-input:focus {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.16);
+}
+
+.po-search-input::placeholder {
+  color: #94a3b8;
+}
+
+@media (max-width: 640px) {
+  .mobile-two-row-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 24px;
+    background: rgba(226, 232, 240, 0.9);
+  }
+
+  .mobile-two-row-tabs button,
+  .mobile-two-row-tabs .tab-btn {
+    flex: 0 0 calc(50% - 4px);
+    min-width: 0;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}
+
+.stock-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.stock-table {
+  min-width: 620px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.stock-table th:first-child,
+.stock-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #ffffff;
+  min-width: 180px;
+  max-width: 180px;
+}
+
+.stock-table th:first-child {
+  z-index: 4;
+  background: #f8fafc;
+}
+
+.stock-table th,
+.stock-table td {
+  white-space: nowrap;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.stock-table th:first-child,
+.stock-table td:first-child {
+  text-align: left;
 }
