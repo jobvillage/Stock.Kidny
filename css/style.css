@@ -2393,3 +2393,18 @@ button {
     height: 86px;
   }
 }
+
+.auto-noti-badge {
+  margin-left: 6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #ff4d5e;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

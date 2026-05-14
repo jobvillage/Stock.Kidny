@@ -290,35 +290,3 @@ function clearRequestStatusBadge() {
     badge.style.display = 'none';
   }
 }
-
-function hideRequestStatusBadgeIfSeen() {
-  const seenAt = localStorage.getItem('request_status_seen_at');
-  if (!seenAt) return;
-
-  const tab = document.getElementById('tab-request-status');
-  if (!tab) return;
-
-  const badges = tab.querySelectorAll(
-    '.badge, .tab-badge, .segment-badge, .nav-badge, .count-badge, [class*="badge"]'
-  );
-
-  badges.forEach((badge) => {
-    badge.textContent = '';
-    badge.style.display = 'none';
-  });
-}
-
-function clearRequestStatusBadge() {
-  localStorage.setItem('request_status_seen_at', new Date().toISOString());
-  hideRequestStatusBadgeIfSeen();
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    hideRequestStatusBadgeIfSeen();
-  }, 500);
-
-  setTimeout(() => {
-    hideRequestStatusBadgeIfSeen();
-  }, 1500);
-});

@@ -52,18 +52,29 @@ function showTab(tab) {
   });
 
   document.querySelectorAll('.panel').forEach((panel) => {
-    panel.classList.toggle('is-active', panel.dataset.panel === tab);
+    const isTarget = panel.dataset.panel === tab;
+    panel.classList.toggle('is-active', isTarget);
+    panel.hidden = !isTarget;
   });
 
   if (tab === 'request_status') {
-    clearRequestStatusBadge();
+    if (typeof markStaffRequestStatusSeen === 'function') {
+      markStaffRequestStatusSeen();
+    }
 
+    // ใช้ตัวเดียวพอ ห้ามเรียก fetchRequestStatuses ซ้ำ
     if (typeof fetchRequestStatus === 'function') {
       fetchRequestStatus();
     }
+  }
 
-    if (typeof fetchRequestStatuses === 'function') {
-      fetchRequestStatuses();
+  if (tab === 'pending') {
+    if (typeof markAdminPendingSeen === 'function') {
+      markAdminPendingSeen();
+    }
+
+    if (typeof fetchPendingTransfers === 'function') {
+      fetchPendingTransfers();
     }
   }
 
@@ -79,23 +90,12 @@ function showTab(tab) {
     }
   }
 
-  if (tab === 'pending') {
-    if (typeof fetchPendingTransfers === 'function') {
-      fetchPendingTransfers();
-    }
-  }
-
-  startAutoRefreshForCurrentTab(tab);
 }
 
 function bindStaticEvents() {
   document.querySelectorAll('.segment').forEach((button) => {
     button.addEventListener('click', () => {
       const tab = button.dataset.tab;
-
-      if (tab === 'request_status') {
-        clearRequestStatusBadge();
-      }
 
       showTab(tab);
     });
@@ -165,28 +165,6 @@ document.addEventListener('input', (event) => {
   input.value = input.value.replace(/[^\d]/g, '');
 });
 
-function clearRequestStatusBadge() {
-  localStorage.setItem('request_status_seen_at', new Date().toISOString());
-  hideRequestStatusBadgeIfSeen();
-}
-
-function hideRequestStatusBadgeIfSeen() {
-  const seenAt = localStorage.getItem('request_status_seen_at');
-  if (!seenAt) return;
-
-  const tab = document.getElementById('tab-request-status');
-  if (!tab) return;
-
-  const badges = tab.querySelectorAll(
-    '.badge, .tab-badge, .segment-badge, .nav-badge, .count-badge, [class*="badge"]'
-  );
-
-  badges.forEach((badge) => {
-    badge.textContent = '';
-    badge.style.display = 'none';
-  });
-}
-
 function stopAutoRefresh() {
   if (autoRefreshTimer) {
     clearInterval(autoRefreshTimer);
@@ -227,3 +205,250 @@ function startAutoRefreshForCurrentTab(tab) {
     return;
   }
 }
+
+let stockRequestChannel = null;
+
+/* =====================
+   COMMON BADGE HELPERS
+===================== */
+
+function getSeenIds(key) {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSeenIds(key, ids) {
+  localStorage.setItem(key, JSON.stringify([...new Set(ids)]));
+}
+
+function setTabBadge(selector, count) {
+  const tab = document.querySelector(selector);
+  if (!tab) return;
+
+  tab.querySelectorAll(
+    '.auto-noti-badge, .badge, .tab-badge, .segment-badge, .nav-badge, .count-badge, [class*="badge"]'
+  ).forEach((badge) => badge.remove());
+
+  if (!count || count <= 0) return;
+
+  const badge = document.createElement('span');
+  badge.className = 'auto-noti-badge';
+  badge.textContent = count;
+  badge.style.display = 'inline-flex';
+
+  tab.appendChild(badge);
+}
+
+/* =====================
+   ADMIN NOTIFICATION
+===================== */
+
+async function getAdminPendingRequestIds() {
+  const { data, error } = await supabaseClient.rpc('get_pending_stock_requests');
+
+  if (error) {
+    console.warn('getAdminPendingRequestIds error:', error);
+    return [];
+  }
+
+  return (data || [])
+    .map((item) => item.request_id || item.requestId)
+    .filter(Boolean);
+}
+
+async function checkAdminPendingBadge() {
+  if (!['admin', 'adminR', 'stock_receiver'].includes(currentUser?.role)) return;
+
+  const key = `seen_pending_requests_${currentUser.role}`;
+  const seen = getSeenIds(key);
+  const ids = await getAdminPendingRequestIds();
+
+  const unreadCount = ids.filter((id) => !seen.has(id)).length;
+
+  console.log('ADMIN PENDING BADGE:', unreadCount, ids);
+
+  setTabBadge('[data-tab="pending"]', unreadCount);
+}
+
+async function markAdminPendingSeen() {
+  if (!['admin', 'adminR', 'stock_receiver'].includes(currentUser?.role)) return;
+
+  const key = `seen_pending_requests_${currentUser.role}`;
+  const ids = await getAdminPendingRequestIds();
+
+  saveSeenIds(key, ids);
+  setTabBadge('[data-tab="pending"]', 0);
+}
+
+/* =====================
+   STAFF NOTIFICATION
+===================== */
+
+async function getStaffReadyRequestIds() {
+  if (!currentUser?.code) return [];
+
+  const { data, error } = await supabaseClient.rpc('get_staff_ready_request_ids', {
+    p_staff_code: currentUser.code,
+  });
+
+  if (error) {
+    console.warn('getStaffReadyRequestIds error:', error);
+    return [];
+  }
+
+  return (data || [])
+    .map((item) => item.request_id || item.requestId)
+    .filter(Boolean);
+}
+
+async function checkStaffRequestStatusBadge() {
+  if (currentUser?.role !== 'center_staff') return;
+
+  const activePanel = document.querySelector('.panel.is-active')?.dataset.panel;
+
+  if (activePanel === 'request_status') {
+    await markStaffRequestStatusSeen();
+    return;
+  }
+
+  const key = `seen_request_status_${currentUser.code}`;
+  const seen = getSeenIds(key);
+  const ids = await getStaffReadyRequestIds();
+
+  const unreadCount = ids.filter((id) => !seen.has(id)).length;
+
+  console.log('STAFF REQUEST STATUS BADGE:', unreadCount, ids);
+
+  setTabBadge('[data-tab="request_status"]', unreadCount);
+}
+
+async function markStaffRequestStatusSeen() {
+  if (currentUser?.role !== 'center_staff') return;
+
+  const key = `seen_request_status_${currentUser.code}`;
+  const ids = await getStaffReadyRequestIds();
+
+  saveSeenIds(key, ids);
+  setTabBadge('[data-tab="request_status"]', 0);
+}
+
+/* =====================
+   INITIAL CHECK
+===================== */
+
+async function checkRequestNotifications() {
+  if (!currentUser) return;
+
+  if (currentUser.role === 'center_staff') {
+    await checkStaffRequestStatusBadge();
+  }
+
+  if (['admin', 'adminR', 'stock_receiver'].includes(currentUser.role)) {
+    await checkAdminPendingBadge();
+  }
+}
+
+/* =====================
+   REALTIME
+===================== */
+
+function startRequestNotificationPolling() {
+  stopRequestNotificationPolling();
+
+  if (!currentUser) return;
+
+  // เช็กครั้งแรกตอน login/restore session
+  checkRequestNotifications();
+
+  const role = currentUser.role;
+  const staffCode = currentUser.code;
+
+  stockRequestChannel = supabaseClient.channel(`stock_requests_realtime_${role}_${staffCode || 'admin'}`);
+
+    stockRequestChannel.on(
+    'postgres_changes',
+    {
+      event: '*',
+      schema: 'public',
+      table: 'stock_requests',
+    },
+    (payload) => {
+      console.log('REALTIME DEBUG ALL STOCK_REQUESTS:', payload);
+    }
+  );
+  
+  // Admin/adminR: ฟังเฉพาะใบขอเบิกใหม่
+  if (['admin', 'adminR', 'stock_receiver'].includes(role)) {
+    stockRequestChannel.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'stock_requests',
+      },
+      async (payload) => {
+        const row = payload.new || {};
+
+        console.log('REALTIME ADMIN INSERT:', row);
+
+        // รับเฉพาะใบขอเบิกที่รอจัดของ
+        if (row.status !== 'pending_pick') return;
+
+        await checkAdminPendingBadge();
+
+        const activePanel = document.querySelector('.panel.is-active')?.dataset.panel;
+
+        if (activePanel === 'pending' && typeof fetchPendingTransfers === 'function') {
+          fetchPendingTransfers();
+        }
+      }
+    );
+  }
+
+  // Staff: ฟังเฉพาะใบของตัวเอง
+  if (role === 'center_staff' && staffCode) {
+    stockRequestChannel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'stock_requests',
+      },
+      async (payload) => {
+        const row = payload.new || {};
+
+        console.log('REALTIME STAFF UPDATE:', row);
+
+        // รับเฉพาะใบของ staff คนนี้ และต้อง completed แล้ว
+        if (row.staff_code !== staffCode) return;
+        if (row.status !== 'completed') return;
+
+        await checkStaffRequestStatusBadge();
+
+        const activePanel = document.querySelector('.panel.is-active')?.dataset.panel;
+
+        if (activePanel === 'request_status' && typeof fetchRequestStatus === 'function') {
+          fetchRequestStatus();
+        }
+      }
+    );
+  }
+
+  stockRequestChannel.subscribe((status) => {
+    console.log('STOCK REQUEST REALTIME STATUS:', status);
+  });
+}
+
+function stopRequestNotificationPolling() {
+  if (stockRequestChannel) {
+    supabaseClient.removeChannel(stockRequestChannel);
+    stockRequestChannel = null;
+    console.log('หยุด Stock Request Realtime แล้ว');
+  }
+}
+
+window.startRequestNotificationPolling = startRequestNotificationPolling;
+window.stopRequestNotificationPolling = stopRequestNotificationPolling;

@@ -79,6 +79,10 @@ async function login() {
       center: user.center || '',
     });
 
+    if (typeof window.startRequestNotificationPolling === 'function') {
+      window.startRequestNotificationPolling();
+    }
+
     localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(currentUser));
 
     showToast('✅ เข้าสู่ระบบสำเร็จ', 'success');
@@ -101,6 +105,10 @@ async function logout() {
   location.reload();
   if (typeof stopRealtime === 'function') {
     stopRealtime();
+  }
+  
+  if (typeof window.stopRequestNotificationPolling === 'function') {
+    window.stopRequestNotificationPolling();
   }
 }
 
@@ -126,6 +134,12 @@ function restoreSession() {
   try {
     currentUser = normalizeUser(JSON.parse(savedUser));
     applyLoginState();
+
+    // เริ่มเช็กแจ้งเตือนหลัง restore login สำเร็จ
+    if (typeof window.startRequestNotificationPolling === 'function') {
+      window.startRequestNotificationPolling();
+    }
+
   } catch (error) {
     localStorage.removeItem(AUTH_SESSION_KEY);
     currentUser = null;
