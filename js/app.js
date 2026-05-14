@@ -1,7 +1,7 @@
 // =====================
 // CONFIG
 // =====================
-
+let autoRefreshTimer = null;
 const STAFF_CENTERS = ['ไตบน', 'ไตล่าง', 'ไตดี'];
 
 function refreshProductSelects() {
@@ -84,6 +84,8 @@ function showTab(tab) {
       fetchPendingTransfers();
     }
   }
+
+  startAutoRefreshForCurrentTab(tab);
 }
 
 function bindStaticEvents() {
@@ -183,4 +185,45 @@ function hideRequestStatusBadgeIfSeen() {
     badge.textContent = '';
     badge.style.display = 'none';
   });
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+    console.log('หยุด Auto Refresh แล้ว');
+  }
+}
+
+function startAutoRefreshForCurrentTab(tab) {
+  stopAutoRefresh();
+
+  // Staff: ใช้เฉพาะหน้าสถานะใบขอเบิก
+  if (tab === 'request_status' && currentUser?.role === 'center_staff') {
+    autoRefreshTimer = setInterval(async () => {
+      if (typeof fetchRequestStatus === 'function') {
+        await fetchRequestStatus();
+      }
+    }, 60000); // ทุก 60 วินาที
+
+    console.log('เริ่ม Auto Refresh: สถานะใบขอเบิก');
+    return;
+  }
+
+  // Admin/adminR: ใช้เฉพาะหน้ารายการขอเบิก
+  if (tab === 'pending' && ['admin', 'adminR', 'stock_receiver'].includes(currentUser?.role)) {
+    autoRefreshTimer = setInterval(async () => {
+      if (typeof fetchPendingTransfers === 'function') {
+        await fetchPendingTransfers();
+
+        // ถ้าไม่มีรายการรอจัดของแล้ว ให้หยุด refresh
+        if (Array.isArray(pendingTransfers) && pendingTransfers.length === 0) {
+          stopAutoRefresh();
+        }
+      }
+    }, 60000); // ทุก 60 วินาที
+
+    console.log('เริ่ม Auto Refresh: รายการขอเบิก');
+    return;
+  }
 }

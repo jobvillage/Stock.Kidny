@@ -128,6 +128,27 @@ function setSyncStatus(text, state = 'loading') {
   el.classList.toggle('is-error', state === 'error');
 }
 
+function getTodayTextForRequestId() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
+}
+
+async function getNextStockRequestIdFromSupabase() {
+  const { data, error } = await supabaseClient.rpc('get_next_stock_request_id');
+
+  if (error) {
+    console.error('getNextStockRequestIdFromSupabase error:', error);
+    throw new Error('สร้างเลขใบเบิกไม่สำเร็จ');
+  }
+
+  console.log('NEW REQUEST ID FROM SUPABASE:', data);
+
+  return data;
+}
+
 async function submitStockOutSupabase() {
   if (!requirePermission('out')) return;
 
@@ -137,7 +158,6 @@ async function submitStockOutSupabase() {
   const date = document.getElementById('out-date').value;
   const center = document.getElementById('out-center').value;
   const note = document.getElementById('out-note').value.trim();
-  const requestId = formRequestIds.out;
 
   if (!date || !center) {
     showToast('⚠️ กรุณากรอกวันที่และศูนย์ที่เบิก', 'error');
@@ -161,6 +181,10 @@ async function submitStockOutSupabase() {
     showToast('', 'loading', 'กำลังส่งใบเบิกไปยัง Admin...');
 
     try {
+      const requestId = await getNextStockRequestIdFromSupabase();
+
+      console.log('REQUEST ID USING:', requestId);
+
       const { data, error } = await supabaseClient.rpc('create_stock_request', {
         p_request_id: requestId,
         p_staff_code: currentUser.code,
@@ -186,7 +210,8 @@ async function submitStockOutSupabase() {
 
       showToast('✅ ส่งใบเบิกให้ Admin แล้ว รอจัดของ', 'success');
 
-      formRequestIds.out = newRequestId('out');
+      await refreshAppDataAfterAction();
+      formRequestIds.out = '';
       resetForm('out');
 
     } catch (error) {
@@ -210,6 +235,10 @@ async function submitStockOutSupabase() {
   showToast('', 'loading', 'กำลังบันทึกเบิกออก...');
 
   try {
+    const requestId = await getNextStockRequestIdFromSupabase();
+
+    console.log('REQUEST ID USING:', requestId);
+
     const { data, error } = await supabaseClient.rpc('stock_out', {
       p_request_id: requestId,
       p_staff_code: currentUser.code,
@@ -236,7 +265,8 @@ async function submitStockOutSupabase() {
 
     showToast('✅ บันทึกเบิกออกสำเร็จ', 'success');
 
-    formRequestIds.out = newRequestId('out');
+    await refreshAppDataAfterAction();
+    formRequestIds.out = '';
     resetForm('out');
 
   } catch (error) {

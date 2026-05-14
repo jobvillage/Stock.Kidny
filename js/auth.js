@@ -95,6 +95,7 @@ async function login() {
 }
 
 async function logout() {
+  stopAutoRefresh();
   localStorage.removeItem(AUTH_SESSION_KEY);
   currentUser = null;
   location.reload();
