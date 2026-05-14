@@ -149,6 +149,34 @@ async function getNextStockRequestIdFromSupabase() {
   return data;
 }
 
+async function refreshAppDataAfterAction() {
+  try {
+    if (typeof fetchStock === 'function') {
+      await fetchStock();
+    }
+
+    if (typeof fetchPendingTransfers === 'function') {
+      await fetchPendingTransfers();
+    }
+
+    if (typeof fetchRequestStatus === 'function') {
+      await fetchRequestStatus();
+    }
+
+    if (typeof fetchPoStatus === 'function') {
+      await fetchPoStatus();
+    }
+
+    if (typeof fetchPendingPoSummary === 'function') {
+      await fetchPendingPoSummary();
+    }
+
+    console.log('รีเฟรชข้อมูลหลังทำรายการแล้ว');
+  } catch (error) {
+    console.warn('refreshAppDataAfterAction error:', error);
+  }
+}
+
 async function submitStockOutSupabase() {
   if (!requirePermission('out')) return;
 
