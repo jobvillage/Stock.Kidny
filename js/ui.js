@@ -277,3 +277,26 @@ function updateStockInfo(select) {
   next.style.display = 'flex';
   next.innerHTML = `สินค้า: <strong>${escapeHtml(product)}</strong> <span aria-hidden="true">|</span> คงเหลือ: <span class="val ${cls}">${qty} ชิ้น</span>`;
 }
+
+function clearRequestStatusBadge() {
+  localStorage.setItem('request_status_seen_at', new Date().toISOString());
+
+  const badge = document.querySelector(
+    '#tab-request-status .badge, #tab-request-status .tab-badge, #tab-request-status .segment-badge'
+  );
+
+  if (badge) {
+    badge.textContent = '';
+    badge.style.display = 'none';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    hideRequestStatusBadgeIfSeen();
+  }, 500);
+
+  setTimeout(() => {
+    hideRequestStatusBadgeIfSeen();
+  }, 1500);
+});

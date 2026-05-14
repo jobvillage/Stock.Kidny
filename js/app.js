@@ -46,9 +46,57 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+function showTab(tab) {
+  document.querySelectorAll('.segment').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.tab === tab);
+  });
+
+  document.querySelectorAll('.panel').forEach((panel) => {
+    panel.classList.toggle('is-active', panel.dataset.panel === tab);
+  });
+
+  if (tab === 'request_status') {
+    clearRequestStatusBadge();
+
+    if (typeof fetchRequestStatus === 'function') {
+      fetchRequestStatus();
+    }
+
+    if (typeof fetchRequestStatuses === 'function') {
+      fetchRequestStatuses();
+    }
+  }
+
+  if (tab === 'po_status') {
+    if (typeof fetchPoStatus === 'function') {
+      fetchPoStatus();
+    }
+  }
+
+  if (tab === 'stock') {
+    if (typeof renderStockDashboard === 'function') {
+      renderStockDashboard();
+    }
+  }
+
+  if (tab === 'pending') {
+    if (typeof fetchPendingTransfers === 'function') {
+      fetchPendingTransfers();
+    }
+  }
+}
+
 function bindStaticEvents() {
-  document.querySelectorAll('[data-tab]').forEach((button) => {
-    button.addEventListener('click', () => switchTab(button.dataset.tab));
+  document.querySelectorAll('.segment').forEach((button) => {
+    button.addEventListener('click', () => {
+      const tab = button.dataset.tab;
+
+      if (tab === 'request_status') {
+        clearRequestStatusBadge();
+      }
+
+      showTab(tab);
+    });
   });
 
   document.querySelectorAll('[data-add-row]').forEach((button) => {
@@ -114,3 +162,25 @@ document.addEventListener('input', (event) => {
 
   input.value = input.value.replace(/[^\d]/g, '');
 });
+
+function clearRequestStatusBadge() {
+  localStorage.setItem('request_status_seen_at', new Date().toISOString());
+  hideRequestStatusBadgeIfSeen();
+}
+
+function hideRequestStatusBadgeIfSeen() {
+  const seenAt = localStorage.getItem('request_status_seen_at');
+  if (!seenAt) return;
+
+  const tab = document.getElementById('tab-request-status');
+  if (!tab) return;
+
+  const badges = tab.querySelectorAll(
+    '.badge, .tab-badge, .segment-badge, .nav-badge, .count-badge, [class*="badge"]'
+  );
+
+  badges.forEach((badge) => {
+    badge.textContent = '';
+    badge.style.display = 'none';
+  });
+}
