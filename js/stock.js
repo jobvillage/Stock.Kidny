@@ -211,39 +211,108 @@ function renderStockDashboard() {
   const box = document.getElementById('stock-dashboard-grid');
   if (!box) return;
 
-  const selectedProduct = document.getElementById('stock-product-filter')?.value || '';
-  const productsToShow = selectedProduct ? [selectedProduct] : PRODUCTS;
+  try {
+    const selectedCenter = document.getElementById('stock-center-filter')?.value || '';
+    const selectedProductFilter = document.getElementById('stock-product-filter')?.value || '';
 
-  const hubStock = localStock['Hub Admin'] || {};
-  const mainStock = localStock['สต็อกใหญ่'] || {};
+    let productList = [
+      ...Object.keys(localStock['Hub Admin'] || {}),
+      ...Object.keys(localStock['สต็อกใหญ่'] || {}),
+      ...Object.keys(pendingPoSummary || {})
+    ];
 
-  const rows = productsToShow.map((product) => {
-    const hubQty = Number(hubStock[product]) || 0;
-    const mainQty = Number(mainStock[product]) || 0;
-    const poQty = Number(pendingPoSummary[product]) || 0;
+    productList = [...new Set(productList)]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, 'th'));
 
-    return `
-      <div class="stock-table-row">
-        <div class="stock-table-product">${escapeHtml(product)}</div>
-        <div class="stock-table-qty">${hubQty}</div>
-        <div class="stock-table-qty">${mainQty}</div>
-        <div class="stock-table-po">${poQty}</div>
+    if (selectedProductFilter) {
+      productList = productList.filter((product) => product === selectedProductFilter);
+    }
+
+    if (productList.length === 0) {
+      box.innerHTML = '<div class="empty-state">ไม่พบรายการสินค้า</div>';
+      return;
+    }
+
+    const fixedRows = productList.map((product) => {
+      return `
+        <div class="stock-fixed-cell">
+          ${escapeHtml(product)}
+        </div>
+      `;
+    }).join('');
+
+    const scrollRows = productList.map((product) => {
+      const hubQty = Number(localStock['Hub Admin']?.[product] || 0);
+      const mainQty = Number(localStock['สต็อกใหญ่']?.[product] || 0);
+      const poQty = Number(pendingPoSummary?.[product] || 0);
+
+      return `
+        <div class="stock-scroll-row">
+          <div class="stock-col-hub">${hubQty}</div>
+          <div class="stock-col-main">${mainQty}</div>
+          <div class="stock-col-po">${poQty}</div>
+        </div>
+      `;
+    }).join('');
+
+    if (selectedCenter === 'Hub Admin') {
+      box.innerHTML = `
+        <div class="stock-table-scroll-x">
+          <div class="stock-table-main stock-table-main-3">
+            <div class="stock-table-head stock-table-row stock-table-row-3">
+              <div class="stock-col-product">รายการสินค้า</div>
+              <div class="stock-col-po">เปิด PO</div>
+              <div class="stock-col-hub">Hub Admin</div>
+            </div>
+            ${rows}
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    if (selectedCenter === 'สต็อกใหญ่') {
+      box.innerHTML = `
+        <div class="stock-table-scroll-x">
+          <div class="stock-table-main stock-table-main-3">
+            <div class="stock-table-head stock-table-row stock-table-row-3">
+              <div class="stock-col-product">รายการสินค้า</div>
+              <div class="stock-col-po">เปิด PO</div>
+              <div class="stock-col-main">สต็อกใหญ่</div>
+            </div>
+            ${rows}
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    box.innerHTML = `
+      <div class="stock-split-table">
+        <div class="stock-fixed-side">
+          <div class="stock-fixed-head">รายการสินค้า</div>
+          ${fixedRows}
+        </div>
+
+        <div class="stock-scroll-side">
+          <div class="stock-scroll-inner">
+            <div class="stock-scroll-head stock-scroll-row">
+              <div>Hub Admin</div>
+              <div>สต็อกใหญ่</div>
+              <div>เปิด PO</div>
+            </div>
+
+            ${scrollRows}
+          </div>
+        </div>
       </div>
     `;
-  }).join('');
 
-  box.innerHTML = `
-    <div class="stock-table-main">
-      <div class="stock-table-head">
-        <div>รายการสินค้า</div>
-        <div>Hub Admin</div>
-        <div>สต็อกใหญ่</div>
-        <div>เปิด PO</div>
-      </div>
-
-      ${rows}
-    </div>
-  `;
+  } catch (error) {
+    console.error('renderStockDashboard error:', error);
+    box.innerHTML = `<div class="empty-state error-state">${escapeHtml(error.message || 'แสดง Stock ไม่สำเร็จ')}</div>`;
+  }
 }
 
 async function fetchStockViewTransfers() {
