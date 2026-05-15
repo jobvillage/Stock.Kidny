@@ -646,11 +646,21 @@ async function fetchPoStatus() {
       });
     }
 
-    // Staff: PO ที่รับเข้าแล้ว ให้ยังเห็นได้ไม่เกิน 1 วัน แล้วค่อยหาย
-    if (currentUser?.role === 'center_staff') {
-      const oneDayMs = 24 * 60 * 60 * 1000;
-      const now = new Date();
+    // PO ที่รับเข้าแล้ว: Staff เห็น 1 วัน, adminR เห็น 7 วัน
+    const now = new Date();
+    const oneDayMs = 24 * 60 * 60 * 1000;
 
+    let receivedVisibleMs = null;
+
+    if (currentUser?.role === 'center_staff') {
+      receivedVisibleMs = 1 * oneDayMs;
+    }
+
+    if (currentUser?.role === 'adminR') {
+      receivedVisibleMs = 7 * oneDayMs;
+    }
+
+    if (receivedVisibleMs !== null) {
       poList = poList.filter((po) => {
         if (po.status !== 'received') return true;
 
@@ -664,7 +674,7 @@ async function fetchPoStatus() {
 
         const receivedDate = new Date(receivedDateText);
 
-        return now - receivedDate <= oneDayMs;
+        return now - receivedDate <= receivedVisibleMs;
       });
     }
 
@@ -699,13 +709,54 @@ function renderPoStatus(poList) {
     const statusClass = po.status === 'received' ? 'is-ready' : '';
 
     const items = Array.isArray(po.items) ? po.items : [];
+    const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
 
     const itemList = items.map((item) => {
+      const product = item.product || '';
+      const orderedQty = Number(item.qty) || 0;
+
+      const receivedQty = receivedItems
+        .filter((received) => received.product === product)
+        .reduce((sum, received) => sum + (Number(received.qty) || 0), 0);
+
+      const remainingQty = Math.max(0, orderedQty - receivedQty);
+      const isFullyReceived = orderedQty > 0 && receivedQty >= orderedQty;
+      const isPartiallyReceived = receivedQty > 0 && remainingQty > 0;
+
+      let receivedLabel = '';
+
+      if (isFullyReceived) {
+        receivedLabel = `
+          <small class="po-received-label is-complete">
+            รับเข้าแล้วครบ ${receivedQty}/${orderedQty}
+          </small>
+        `;
+      } else if (isPartiallyReceived) {
+        receivedLabel = `
+          <small class="po-received-label is-partial">
+            รับเข้าแล้ว ${receivedQty}/${orderedQty}
+          </small>
+        `;
+      } else {
+        receivedLabel = `
+          <small class="po-received-label is-waiting">
+            ยังไม่รับเข้า
+          </small>
+        `;
+      }
+
       return `
-        <div class="po-item-row" data-product="${escapeHtml(item.product || '')}" data-qty="${Number(item.qty) || 0}">
-          <div class="po-item-name">${escapeHtml(item.product || '-')}</div>
-          <div class="po-item-qty">${Number(item.qty) || 0}</div>
-          <div class="po-item-unit">ชิ้น</div>
+        <div 
+          class="po-item-row ${isFullyReceived ? 'is-received-complete' : ''}" 
+          data-product="${escapeHtml(product)}" 
+          data-qty="${orderedQty}"
+        >
+          <div class="po-item-name">${escapeHtml(product || '-')}</div>
+
+          <div class="po-item-qty po-item-qty-with-status">
+            <strong>${orderedQty}</strong>
+            ${receivedLabel}
+          </div>
         </div>
       `;
     }).join('');
@@ -722,7 +773,7 @@ function renderPoStatus(poList) {
             <div class="po-status-top">
               <span class="overview-pill ${statusClass}">${statusText}</span>
 
-              ${po.status !== 'received' ? `
+              ${!['received', 'partial_received'].includes(po.status) ? `
                 <button 
                   class="btn-po-edit" 
                   type="button"
@@ -771,7 +822,6 @@ function renderPoStatus(poList) {
             <div class="po-items-head">
               <div>สินค้า</div>
               <div>จำนวน</div>
-              <div>หน่วย</div>
             </div>
 
             ${itemList}
@@ -806,16 +856,13 @@ function enablePoEdit(poId) {
   const po = window.currentPoStatusList?.find((item) => item.po_id === poId);
   const card = document.querySelector(`[data-po-id="${poId}"]`);
 
-  if (card) {
-    card.classList.add('is-editing-po');
-  }
-
   if (!po || !card) {
     showToast('❌ ไม่พบข้อมูล PO นี้', 'error');
     return;
   }
 
-  // กันกดแก้ไขซ้ำตอนอยู่ในโหมดแก้ไขแล้ว
+  card.classList.add('is-editing-po');
+
   if (card.querySelector('.po-edit-list')) {
     showToast('กำลังอยู่ในโหมดแก้ไขแล้ว', 'error');
     return;
@@ -848,7 +895,13 @@ function enablePoEdit(poId) {
 
         <input class="po-edit-qty" type="number" min="1" value="${qty}" />
 
-        <button class="btn-remove-row" type="button" onclick="this.closest('.po-edit-row').remove()">×</button>
+        <button 
+          class="btn-remove-row" 
+          type="button" 
+          onclick="this.closest('.po-edit-row').remove()"
+        >
+          ×
+        </button>
       </div>
     `;
   }).join('');
@@ -863,17 +916,52 @@ function enablePoEdit(poId) {
     <div class="po-edit-list">
       ${editRows}
     </div>
-
-    <div class="po-edit-actions">
-      <button class="btn-request-secondary" type="button" onclick="addPoEditRow('${escapeHtml(poId)}')">
-        + เพิ่มรายการ
-      </button>
-
-      <button class="btn-request-primary" type="button" onclick="savePoEdit('${escapeHtml(poId)}')">
-        บันทึกแก้ไข
-      </button>
-    </div>
   `;
+
+  card.querySelectorAll('.po-edit-product').forEach((select) => {
+    if (typeof enhanceProductSelect === 'function') {
+      enhanceProductSelect(select);
+    }
+  });
+
+  // ลบ footer เก่าถ้ามี
+  card.querySelector('.po-edit-footer')?.remove();
+
+  const editFooter = document.createElement('div');
+  editFooter.className = 'po-edit-footer';
+
+  editFooter.innerHTML = `
+    <button 
+      class="btn-request-secondary" 
+      type="button" 
+      onclick="addPoEditRow('${escapeHtml(poId)}')"
+    >
+      + เพิ่มรายการ
+    </button>
+
+    <button 
+      class="btn-request-secondary" 
+      type="button" 
+      onclick="fetchPoStatus()"
+    >
+      ยกเลิก
+    </button>
+
+    <button 
+      class="btn-request-primary" 
+      type="button" 
+      onclick="savePoEdit('${escapeHtml(poId)}')"
+    >
+      บันทึกแก้ไข
+    </button>
+  `;
+
+  const stockItems = card.querySelector('.stock-request-items');
+  if (stockItems) {
+    stockItems.insertAdjacentElement('afterend', editFooter);
+  } else {
+    card.appendChild(editFooter);
+  }
 }
 
 function addPoEditRow(poId) {
@@ -895,6 +983,11 @@ function addPoEditRow(poId) {
   `;
 
   list.appendChild(row);
+
+  const select = row.querySelector('.po-edit-product');
+  if (select && typeof enhanceProductSelect === 'function') {
+    enhanceProductSelect(select);
+  }
 }
 
 async function savePoEdit(poId) {
@@ -1132,11 +1225,13 @@ function getPoRemainingItems(po) {
       .filter((received) => received.product === product)
       .reduce((sum, received) => sum + (Number(received.qty) || 0), 0);
 
+    const remainingQty = Math.max(0, requestedQty - receivedQty);
+
     return {
       product,
       requestedQty,
       receivedQty,
-      remainingQty: Math.max(0, requestedQty - receivedQty),
+      remainingQty,
     };
   }).filter((item) => item.product && item.remainingQty > 0);
 }
@@ -1168,6 +1263,7 @@ async function receivePoFull(poId) {
 function openPartialReceivePo(poId) {
   const po = window.currentPoStatusList?.find((item) => item.po_id === poId);
   const card = document.querySelector(`[data-po-id="${poId}"]`);
+
   if (card) {
     card.classList.remove('is-editing-po');
   }
@@ -1178,7 +1274,6 @@ function openPartialReceivePo(poId) {
   const itemBox = card.querySelector('.po-items-table');
   if (!itemBox) return;
 
-  // ซ่อนปุ่มรับเข้าทั้งใบ / รับบางรายการ ตอนอยู่โหมดแก้ไข
   const receiveActions = card.querySelector('.po-receive-actions');
   if (receiveActions) {
     receiveActions.style.display = 'none';
@@ -1190,38 +1285,53 @@ function openPartialReceivePo(poId) {
   }
 
   itemBox.innerHTML = `
-    <div class="po-items-head po-partial-head">
-      <div>สินค้า</div>
-      <div>รับเข้า</div>
-      <div>ค้างรับ</div>
-      <div>บันทึก</div>
-    </div>
-
-    ${remainingItems.map((item) => `
-      <div class="po-partial-row">
-        <div class="po-item-name">${escapeHtml(item.product)}</div>
-
-        <input
-          class="po-partial-qty"
-          type="number"
-          min="0"
-          max="${item.remainingQty}"
-          value="${item.remainingQty}"
-          data-product="${escapeHtml(item.product)}"
-          data-max="${item.remainingQty}"
-        />
-
-        <div class="po-item-unit">${item.remainingQty}</div>
-
-        <button 
-          class="btn-save-partial-line" 
-          type="button"
-          onclick="saveSinglePartialReceivePo('${escapeHtml(poId)}', this)"
-        >
-          บันทึก
-        </button>
+    <div class="po-partial-table">
+      <div class="po-partial-grid po-partial-header">
+        <div>สินค้า</div>
+        <div>PO เดิม</div>
+        <div>รับเข้าแล้ว</div>
+        <div>คงเหลือ</div>
+        <div>รับเข้าครั้งนี้</div>
+        <div>บันทึก</div>
       </div>
-    `).join('')}
+
+      ${remainingItems.map((item) => `
+        <div class="po-partial-row po-partial-line po-partial-grid">
+          <div class="po-item-name">${escapeHtml(item.product)}</div>
+
+          <div class="po-item-qty" data-role="requested-qty">${item.requestedQty}</div>
+
+          <div class="po-item-qty" data-role="received-qty">${item.receivedQty}</div>
+
+          <div class="po-item-qty" data-role="remaining-qty">${item.remainingQty}</div>
+
+          <div class="po-receive-input-cell">
+          <input
+            class="po-partial-qty"
+            type="number"
+            min="0"
+            max="${item.remainingQty}"
+            value="${item.remainingQty}"
+            data-product="${escapeHtml(item.product)}"
+            data-requested-qty="${item.requestedQty}"
+            data-received-qty="${item.receivedQty}"
+            data-remaining-qty="${item.remainingQty}"
+            data-max="${item.remainingQty}"
+          />
+          </div>
+
+          <div class="po-save-cell">
+            <button 
+              class="btn-save-partial-line" 
+              type="button"
+              onclick="saveSinglePartialReceivePo('${escapeHtml(poId)}', this)"
+            >
+              บันทึก
+            </button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
   `;
 
   const actionBox = card.querySelector('.po-receive-actions');
@@ -1244,7 +1354,7 @@ function openPartialReceivePo(poId) {
         type="button" 
         onclick="openPartialReceivePo('${escapeHtml(poId)}')"
       >
-        รับบางรายการ
+        รีเฟรชรายการค้างรับ
       </button>
 
       <button 
@@ -1283,7 +1393,31 @@ async function savePartialReceivePo(poId) {
   await receivePoItems(poId, items);
 }
 
-async function receivePoItems(poId, items) {
+async function receivePoItems(poId, items, options = {}) {
+  const shouldRefreshPoStatus = options.refreshPoStatus !== false;
+
+  const validItems = (items || [])
+    .map((item) => ({
+      product: item.product,
+      qty: Number(item.qty || 0),
+      remainingQty: Number(item.remainingQty || item.remaining_qty || 0),
+    }))
+    .filter((item) => item.product && item.qty > 0);
+
+  if (validItems.length === 0) {
+    showToast('⚠️ กรุณากรอกจำนวนสินค้าที่ต้องการรับเข้า', 'error');
+    return null;
+  }
+
+  const overItem = validItems.find((item) => {
+    return item.remainingQty > 0 && item.qty > item.remainingQty;
+  });
+
+  if (overItem) {
+    showToast(`❌ ${overItem.product} รับเข้าเกินจำนวนคงเหลือ`, 'error');
+    return null;
+  }
+
   showToast('', 'loading', 'กำลังรับสินค้าเข้า...');
 
   try {
@@ -1292,7 +1426,10 @@ async function receivePoItems(poId, items) {
       p_po_id: poId,
       p_staff_code: currentUser?.code || '',
       p_staff_name: currentUser?.name || currentUser?.code || '',
-      p_items: items,
+      p_items: validItems.map((item) => ({
+        product: item.product,
+        qty: item.qty,
+      })),
     });
 
     if (error) throw error;
@@ -1303,25 +1440,74 @@ async function receivePoItems(poId, items) {
 
     showToast(`✅ ${data.message || 'รับสินค้าเข้าสำเร็จ'}`, 'success');
 
-    fetchPoStatus();
-    fetchStock();
+    if (shouldRefreshPoStatus) {
+      await fetchPoStatus();
+    }
+
+    await fetchStock();
     fetchPendingPoSummary?.();
+
+    return data;
 
   } catch (error) {
     console.error('receivePoItems error:', error);
     showToast(`❌ ${error.message || 'รับสินค้าเข้าไม่สำเร็จ'}`, 'error');
+    return null;
   }
 }
 
+function setPartialReceiveCell(row, role, value) {
+  const cell = row.querySelector(`[data-role="${role}"]`);
+  if (cell) {
+    cell.textContent = value;
+  }
+}
+
+function updatePartialReceiveRowAfterSave(row, receivedThisTime) {
+  const input = row.querySelector('.po-partial-qty');
+  const button = row.querySelector('.btn-save-partial-line');
+
+  if (!input) return;
+
+  const requestedQty = Number(input.dataset.requestedQty || 0);
+  const oldReceivedQty = Number(input.dataset.receivedQty || 0);
+
+  const newReceivedQty = Math.min(requestedQty, oldReceivedQty + receivedThisTime);
+  const newRemainingQty = Math.max(0, requestedQty - newReceivedQty);
+
+  input.dataset.receivedQty = String(newReceivedQty);
+  input.dataset.remainingQty = String(newRemainingQty);
+  input.dataset.max = String(newRemainingQty);
+  input.max = String(newRemainingQty);
+
+  setPartialReceiveCell(row, 'received-qty', newReceivedQty);
+  setPartialReceiveCell(row, 'remaining-qty', newRemainingQty);
+
+  if (newRemainingQty <= 0) {
+    input.value = 0;
+    input.disabled = true;
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'ครบแล้ว';
+    }
+
+    row.classList.add('is-received-complete');
+    return;
+  }
+
+  input.value = newRemainingQty;
+}
+
 async function saveSinglePartialReceivePo(poId, button) {
-  const row = button.closest('.po-partial-row');
+  const row = button.closest('.po-partial-row, .po-partial-line');
   if (!row) return;
 
   const input = row.querySelector('.po-partial-qty');
   if (!input) return;
 
   const product = input.dataset.product || '';
-  const max = Number(input.dataset.max) || 0;
+  const remainingQty = Number(input.dataset.remainingQty || input.dataset.max || 0);
   let qty = Number(input.value) || 0;
 
   if (!product) {
@@ -1335,20 +1521,40 @@ async function saveSinglePartialReceivePo(poId, button) {
     return;
   }
 
-  if (qty > max) {
-    qty = max;
-    input.value = max;
+  if (qty > remainingQty) {
+    qty = remainingQty;
+    input.value = remainingQty;
   }
 
   const ok = confirm(`ยืนยันรับเข้า ${product} จำนวน ${qty} ชิ้น ใช่ไหม?`);
   if (!ok) return;
 
-  await receivePoItems(poId, [
+  button.disabled = true;
+
+  const result = await receivePoItems(
+    poId,
+    [
+      {
+        product,
+        qty,
+        remainingQty,
+      },
+    ],
     {
-      product,
-      qty,
-    },
-  ]);
+      refreshPoStatus: false,
+    }
+  );
+
+  if (!result || result.success !== true) {
+    button.disabled = false;
+    return;
+  }
+
+  updatePartialReceiveRowAfterSave(row, qty);
+
+  if (!row.classList.contains('is-received-complete')) {
+    button.disabled = false;
+  }
 }
 
 async function fetchRequestStatus() {
@@ -1379,11 +1585,12 @@ function renderRequestStatus(requestList) {
   if (!box) return;
 
   const badge = document.getElementById('request-status-badge');
-  const readyCount = (requestList || []).filter((request) => request.status === 'completed').length;
 
+  // ไม่ให้ renderRequestStatus สร้าง badge เอง
+  // เพราะ badge แจ้งเตือนใช้ระบบ seen/unseen ใน app.js แล้ว
   if (badge) {
-    badge.hidden = readyCount === 0;
-    badge.textContent = readyCount;
+    badge.hidden = true;
+    badge.textContent = '';
   }
 
   if (!requestList.length) {

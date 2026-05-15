@@ -20,6 +20,28 @@ function refreshProductSelects() {
   });
 }
 
+function refreshStockProductFilter() {
+  const select = document.getElementById('stock-product-filter');
+  if (!select) return;
+
+  const oldValue = select.value;
+
+  const products = [...new Set(PRODUCTS || [])]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'th'));
+
+  select.innerHTML = `
+    <option value="">ทุกสินค้า</option>
+    ${products.map((product) => `
+      <option value="${escapeHtml(product)}">${escapeHtml(product)}</option>
+    `).join('')}
+  `;
+
+  if (oldValue && products.includes(oldValue)) {
+    select.value = oldValue;
+  }
+}
+
 const formRequestIds = {
   in: newRequestId('in'),
   out: newRequestId('out'),
@@ -29,6 +51,9 @@ const formRequestIds = {
 document.addEventListener('DOMContentLoaded', () => {
   loadProductsFromSupabase()
     .then(() => {
+      refreshProductSelects();
+      refreshStockProductFilter();
+      
       setToday('in-date');
       setToday('out-date');
       setToday('transfer-date');

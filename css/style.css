@@ -2408,3 +2408,280 @@ button {
   align-items: center;
   justify-content: center;
 }
+
+/* ===== Desktop / จอใหญ่ ===== */
+@media (min-width: 768px) {
+  /* ฝั่งชื่อสินค้า */
+  .stock-fixed-head,
+  .stock-fixed-cell {
+    justify-content: flex-start;
+    text-align: left;
+    padding-left: 16px;
+  }
+
+  /* ฝั่งตัวเลขและหัวคอลัมน์ด้านขวา */
+  .stock-scroll-head > div,
+  .stock-scroll-row > div {
+    justify-content: flex-end;
+    text-align: right;
+    padding-right: 20px;
+  }
+
+  /* ให้พื้นที่ฝั่งขวากินเต็ม */
+  .stock-scroll-side {
+    overflow-x: visible;
+  }
+
+  .stock-scroll-inner {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* กระจาย 3 ช่องด้านขวาให้เต็มพื้นที่ */
+  .stock-scroll-row {
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+  }
+}
+
+/* ===============================
+   PO Partial Receive Table
+   สินค้า | PO เดิม | รับเข้าแล้ว | คงเหลือ | รับเข้าครั้งนี้ | บันทึก
+================================ */
+
+.po-partial-table {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.po-partial-grid {
+  display: grid !important;
+  grid-template-columns: minmax(180px, 1.7fr) 90px 110px 100px 140px 100px !important;
+  align-items: center;
+  gap: 8px;
+  min-width: 760px;
+}
+
+.po-partial-head {
+  background: #f1f5f9;
+  color: #64748b;
+  font-weight: 800;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.po-partial-head > div,
+.po-partial-row > div {
+  padding: 12px 10px;
+  box-sizing: border-box;
+}
+
+.po-partial-row {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.po-partial-row .po-item-name {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.po-partial-row .po-item-qty {
+  text-align: center;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.po-receive-input-cell {
+  display: flex;
+  justify-content: center;
+}
+
+.po-partial-qty {
+  width: 100%;
+  max-width: 120px;
+  height: 44px;
+  text-align: center;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+  font-weight: 800;
+}
+
+.po-save-cell {
+  display: flex;
+  justify-content: center;
+}
+
+.btn-save-partial-line {
+  min-width: 86px;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: #dff8ee;
+  color: #059669;
+  font-weight: 900;
+}
+
+.po-edit-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.po-edit-footer button {
+  min-height: 48px;
+}
+
+@media (max-width: 640px) {
+  .po-edit-footer {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===============================
+   PO Partial Receive: fixed column order
+================================ */
+
+.po-partial-table {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+}
+
+.po-partial-grid {
+  display: grid !important;
+  grid-template-columns: minmax(180px, 1.6fr) 90px 110px 100px 140px 100px !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 760px !important;
+}
+
+.po-partial-header {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  font-weight: 800 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.po-partial-header > div,
+.po-partial-line > div {
+  padding: 12px 10px !important;
+  box-sizing: border-box !important;
+}
+
+.po-partial-line {
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.po-partial-line:last-child {
+  border-bottom: 0 !important;
+}
+
+.po-partial-line .po-item-name {
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+
+.po-partial-line .po-item-qty {
+  text-align: center !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+}
+
+.po-receive-input-cell,
+.po-save-cell {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.po-partial-qty {
+  width: 100% !important;
+  max-width: 120px !important;
+  height: 44px !important;
+  text-align: center !important;
+  border: 1px solid #dbe3ef !important;
+  border-radius: 14px !important;
+  font-weight: 800 !important;
+}
+
+.btn-save-partial-line {
+  min-width: 86px !important;
+  height: 44px !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: #dff8ee !important;
+  color: #059669 !important;
+  font-weight: 900 !important;
+}
+
+@media (max-width: 640px) {
+  .po-partial-grid {
+    grid-template-columns: 150px 80px 95px 85px 120px 90px !important;
+    min-width: 720px !important;
+  }
+}
+
+.po-partial-line.is-received-complete,
+.po-partial-row.is-received-complete {
+  opacity: 0.45;
+  background: #f3f4f6;
+}
+
+.po-partial-line.is-received-complete input,
+.po-partial-row.is-received-complete input {
+  background: #e5e7eb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.po-partial-line.is-received-complete button,
+.po-partial-row.is-received-complete button {
+  background: #e5e7eb !important;
+  color: #6b7280 !important;
+  cursor: not-allowed;
+}
+
+.po-item-qty-with-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.po-received-label {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.po-received-label.is-complete {
+  color: #059669;
+}
+
+.po-received-label.is-partial {
+  color: #d97706;
+}
+
+.po-received-label.is-waiting {
+  color: #94a3b8;
+}
+
+.po-item-row.is-received-complete {
+  opacity: 0.55;
+  background: #f8fafc;
+}
+
+/* PO item table: hide unit column */
+.po-items-head-2,
+.po-item-row-2 {
+  grid-template-columns: minmax(180px, 1fr) 150px !important;
+}
+
+.po-item-row-2 .po-item-qty {
+  text-align: center;
+}

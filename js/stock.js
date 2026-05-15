@@ -213,7 +213,7 @@ function renderStockDashboard() {
 
   try {
     const selectedCenter = document.getElementById('stock-center-filter')?.value || '';
-    const selectedProductFilter = document.getElementById('stock-product-filter')?.value || '';
+    const selectedProduct = document.getElementById('stock-product-filter')?.value || '';
 
     let productList = [
       ...Object.keys(localStock['Hub Admin'] || {}),
@@ -225,8 +225,8 @@ function renderStockDashboard() {
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, 'th'));
 
-    if (selectedProductFilter) {
-      productList = productList.filter((product) => product === selectedProductFilter);
+    if (selectedProduct) {
+      productList = productList.filter((product) => product === selectedProduct);
     }
 
     if (productList.length === 0) {
@@ -234,59 +234,59 @@ function renderStockDashboard() {
       return;
     }
 
-    const fixedRows = productList.map((product) => {
-      return `
-        <div class="stock-fixed-cell">
-          ${escapeHtml(product)}
-        </div>
-      `;
-    }).join('');
+    let columns = [];
 
-    const scrollRows = productList.map((product) => {
-      const hubQty = Number(localStock['Hub Admin']?.[product] || 0);
-      const mainQty = Number(localStock['สต็อกใหญ่']?.[product] || 0);
-      const poQty = Number(pendingPoSummary?.[product] || 0);
-
-      return `
-        <div class="stock-scroll-row">
-          <div class="stock-col-hub">${hubQty}</div>
-          <div class="stock-col-main">${mainQty}</div>
-          <div class="stock-col-po">${poQty}</div>
-        </div>
-      `;
-    }).join('');
-
-    if (selectedCenter === 'Hub Admin') {
-      box.innerHTML = `
-        <div class="stock-table-scroll-x">
-          <div class="stock-table-main stock-table-main-3">
-            <div class="stock-table-head stock-table-row stock-table-row-3">
-              <div class="stock-col-product">รายการสินค้า</div>
-              <div class="stock-col-po">เปิด PO</div>
-              <div class="stock-col-hub">Hub Admin</div>
-            </div>
-            ${rows}
-          </div>
-        </div>
-      `;
-      return;
+    if (!selectedCenter || selectedCenter === 'Hub Admin') {
+      columns.push({
+        key: 'hub',
+        label: 'Hub Admin',
+        className: 'stock-col-hub',
+        getValue: (product) => Number(localStock['Hub Admin']?.[product] || 0)
+      });
     }
 
-    if (selectedCenter === 'สต็อกใหญ่') {
-      box.innerHTML = `
-        <div class="stock-table-scroll-x">
-          <div class="stock-table-main stock-table-main-3">
-            <div class="stock-table-head stock-table-row stock-table-row-3">
-              <div class="stock-col-product">รายการสินค้า</div>
-              <div class="stock-col-po">เปิด PO</div>
-              <div class="stock-col-main">สต็อกใหญ่</div>
-            </div>
-            ${rows}
-          </div>
-        </div>
-      `;
-      return;
+    if (!selectedCenter || selectedCenter === 'สต็อกใหญ่') {
+      columns.push({
+        key: 'main',
+        label: 'สต็อกใหญ่',
+        className: 'stock-col-main',
+        getValue: (product) => Number(localStock['สต็อกใหญ่']?.[product] || 0)
+      });
     }
+
+    // เปิด PO ให้อยู่ช่องสุดท้ายเสมอ
+    columns.push({
+      key: 'po',
+      label: 'เปิด PO',
+      className: 'stock-col-po',
+      getValue: (product) => Number(pendingPoSummary?.[product] || 0)
+    });
+
+    const gridTemplate = columns
+      .map((col) => col.key === 'po' ? 'minmax(90px, 0.8fr)' : 'minmax(130px, 1fr)')
+      .join(' ');
+
+    const fixedRows = productList.map((product) => `
+      <div class="stock-fixed-cell">
+        ${escapeHtml(product)}
+      </div>
+    `).join('');
+
+    const scrollHead = `
+      <div class="stock-scroll-head stock-scroll-row" style="grid-template-columns: ${gridTemplate};">
+        ${columns.map((col) => `<div>${escapeHtml(col.label)}</div>`).join('')}
+      </div>
+    `;
+
+    const scrollRows = productList.map((product) => `
+      <div class="stock-scroll-row" style="grid-template-columns: ${gridTemplate};">
+        ${columns.map((col) => `
+          <div class="${col.className}">
+            ${col.getValue(product)}
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
 
     box.innerHTML = `
       <div class="stock-split-table">
@@ -297,12 +297,7 @@ function renderStockDashboard() {
 
         <div class="stock-scroll-side">
           <div class="stock-scroll-inner">
-            <div class="stock-scroll-head stock-scroll-row">
-              <div>Hub Admin</div>
-              <div>สต็อกใหญ่</div>
-              <div>เปิด PO</div>
-            </div>
-
+            ${scrollHead}
             ${scrollRows}
           </div>
         </div>
