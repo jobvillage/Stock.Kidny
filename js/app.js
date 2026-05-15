@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     .then(() => {
       refreshProductSelects();
       refreshStockProductFilter();
-      
+
       setToday('in-date');
       setToday('out-date');
       setToday('transfer-date');
@@ -357,7 +357,15 @@ async function markStaffRequestStatusSeen() {
   const ids = await getStaffReadyRequestIds();
 
   saveSeenIds(key, ids);
+
   setTabBadge('[data-tab="request_status"]', 0);
+
+  const oldBadge = document.getElementById('request-status-badge');
+  if (oldBadge) {
+    oldBadge.hidden = true;
+    oldBadge.textContent = '';
+    oldBadge.style.display = 'none';
+  }
 }
 
 /* =====================

@@ -1586,11 +1586,12 @@ function renderRequestStatus(requestList) {
 
   const badge = document.getElementById('request-status-badge');
 
-  // ไม่ให้ renderRequestStatus สร้าง badge เอง
-  // เพราะ badge แจ้งเตือนใช้ระบบ seen/unseen ใน app.js แล้ว
+  // ปิด badge เก่าถาวร ไม่ให้นับ completed ทุกครั้งที่ login
+  // badge แจ้งเตือนจริงให้ใช้ระบบ seen/unseen ใน app.js เท่านั้น
   if (badge) {
     badge.hidden = true;
     badge.textContent = '';
+    badge.style.display = 'none';
   }
 
   if (!requestList.length) {
