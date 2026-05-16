@@ -2685,3 +2685,18 @@ button {
 .po-item-row-2 .po-item-qty {
   text-align: center;
 }
+
+.btn-po-print {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-po-print:hover {
+  background: #e0e7ff;
+}

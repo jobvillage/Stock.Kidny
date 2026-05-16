@@ -186,9 +186,16 @@ async function submitStockOutSupabase() {
   const date = document.getElementById('out-date').value;
   const center = document.getElementById('out-center').value;
   const note = document.getElementById('out-note').value.trim();
+  const outPerson = document.getElementById('out-person')?.value.trim() || '';
 
   if (!date || !center) {
     showToast('⚠️ กรุณากรอกวันที่และศูนย์ที่เบิก', 'error');
+    return;
+  }
+
+  if (!outPerson) {
+    showToast('⚠️ กรุณากรอกชื่อผู้เบิกใช้', 'error');
+    document.getElementById('out-person')?.focus();
     return;
   }
 
@@ -216,7 +223,7 @@ async function submitStockOutSupabase() {
       const { data, error } = await supabaseClient.rpc('create_stock_request', {
         p_request_id: requestId,
         p_staff_code: currentUser.code,
-        p_staff_name: currentUser.name,
+        p_staff_name: outPerson,
         p_date: date,
         p_center: center,
         p_note: note,
@@ -241,6 +248,12 @@ async function submitStockOutSupabase() {
       await refreshAppDataAfterAction();
       formRequestIds.out = '';
       resetForm('out');
+
+      const outPersonInput = document.getElementById('out-person');
+      if (outPersonInput) {
+        outPersonInput.value = '';
+        outPersonInput.placeholder = 'กรอกชื่อผู้เบิกใช้';
+      }
 
     } catch (error) {
       console.error('Supabase create_stock_request error:', error);

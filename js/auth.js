@@ -221,11 +221,20 @@ function setPersonFieldsFromUser() {
     inPerson.readOnly = false;
   }
 
-  // เบิกออก / Transfer: ใช้ชื่อคนที่ Login อัตโนมัติ
-  ['out-person', 'transfer-person'].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.value = displayName;
-  });
+  // ใบขอเบิก: ให้กรอกชื่อผู้เบิกใช้ทุกครั้ง
+  const outPerson = document.getElementById('out-person');
+  if (outPerson) {
+    outPerson.value = '';
+    outPerson.placeholder = 'กรอกชื่อผู้เบิกใช้';
+    outPerson.disabled = false;
+    outPerson.readOnly = false;
+  }
+
+  // Transfer เดิม: คงไว้ ไม่แตะ PO
+  const transferPerson = document.getElementById('transfer-person');
+  if (transferPerson) {
+    transferPerson.value = displayName;
+  }
 }
 
 function canAccessTab(tab) {

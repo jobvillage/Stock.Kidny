@@ -773,6 +773,14 @@ function renderPoStatus(poList) {
             <div class="po-status-top">
               <span class="overview-pill ${statusClass}">${statusText}</span>
 
+              <button 
+                class="btn-po-print" 
+                type="button"
+                onclick="printPoDocument('${escapeHtml(po.po_id || '')}')"
+              >
+                🖨️ พิมพ์ PO
+              </button>
+
               ${!['received', 'partial_received'].includes(po.status) ? `
                 <button 
                   class="btn-po-edit" 
@@ -1041,6 +1049,229 @@ document.addEventListener('click', (event) => {
   const poId = button.dataset.editPoId;
   enablePoEdit(poId);
 });
+
+function printPoDocument(poId) {
+  const po = window.currentPoStatusList?.find((item) => item.po_id === poId);
+
+  if (!po) {
+    showToast('❌ ไม่พบข้อมูล PO นี้', 'error');
+    return;
+  }
+
+  const items = Array.isArray(po.items) ? po.items : [];
+  const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
+
+  const statusText = po.status === 'received'
+    ? 'รับเข้าแล้ว'
+    : po.status === 'partial_received'
+      ? 'รับเข้าบางส่วน'
+      : 'รอรับสินค้า';
+
+  const itemRows = items.map((item, index) => {
+    const product = item.product || '';
+    const orderedQty = Number(item.qty) || 0;
+
+    const receivedQty = receivedItems
+      .filter((received) => received.product === product)
+      .reduce((sum, received) => sum + (Number(received.qty) || 0), 0);
+
+    const remainingQty = Math.max(0, orderedQty - receivedQty);
+
+    return `
+      <tr>
+        <td class="center">${index + 1}</td>
+        <td>${escapeHtml(product || '-')}</td>
+        <td class="num">${orderedQty}</td>
+        <td class="num">${receivedQty}</td>
+        <td class="num">${remainingQty}</td>
+        <td></td>
+        <td></td>
+      </tr>
+    `;
+  }).join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+      <meta charset="UTF-8">
+      <title>ใบ PO ${escapeHtml(po.po_id || '')}</title>
+      <style>
+        body {
+          font-family: "Sarabun", Arial, sans-serif;
+          color: #111827;
+          padding: 24px;
+          background: #ffffff;
+        }
+
+        .doc {
+          max-width: 820px;
+          margin: 0 auto;
+        }
+
+        h1 {
+          margin: 0 0 6px;
+          text-align: center;
+          font-size: 24px;
+        }
+
+        .subtitle {
+          text-align: center;
+          color: #64748b;
+          font-size: 13px;
+          margin-bottom: 22px;
+        }
+
+        .meta {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px 22px;
+          margin-bottom: 18px;
+          font-size: 14px;
+        }
+
+        .meta div {
+          border-bottom: 1px solid #d1d5db;
+          padding: 7px 0;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 14px;
+          font-size: 13px;
+        }
+
+        th, td {
+          border: 1px solid #d1d5db;
+          padding: 8px;
+          vertical-align: middle;
+        }
+
+        th {
+          background: #f3f4f6;
+          text-align: center;
+          font-weight: 800;
+        }
+
+        .center {
+          text-align: center;
+        }
+
+        .num {
+          text-align: center;
+          font-weight: 800;
+        }
+
+        .note-box {
+          margin-top: 18px;
+          border: 1px solid #d1d5db;
+          padding: 10px 12px;
+          min-height: 44px;
+          font-size: 14px;
+        }
+
+        .signatures {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 48px;
+          margin-top: 58px;
+          text-align: center;
+          font-size: 14px;
+        }
+
+        .line {
+          border-top: 1px solid #111827;
+          padding-top: 8px;
+        }
+
+        @media print {
+          body {
+            padding: 0;
+          }
+
+          .doc {
+            max-width: 100%;
+          }
+        }
+      </style>
+    </head>
+
+    <body>
+      <div class="doc">
+        <h1>ใบสั่งสินค้า / PO</h1>
+        <div class="subtitle">สำหรับตรวจเช็กรายการเมื่อสินค้ามาส่ง</div>
+
+        <div class="meta">
+          <div><strong>เลข PO:</strong> ${escapeHtml(po.po_id || '-')}</div>
+          <div><strong>สถานะ:</strong> ${escapeHtml(statusText)}</div>
+          <div><strong>วันที่เปิด PO:</strong> ${escapeHtml(po.po_date || '-')}</div>
+          <div><strong>ผู้เปิด PO:</strong> ${escapeHtml(po.po_person || '-')}</div>
+          <div><strong>วันที่พิมพ์:</strong> ${new Date().toLocaleString('th-TH')}</div>
+          <div><strong>ผู้พิมพ์:</strong> ${escapeHtml(currentUser?.name || currentUser?.code || '-')}</div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 42px;">ลำดับ</th>
+              <th>รายการสินค้า</th>
+              <th style="width: 80px;">จำนวน PO</th>
+              <th style="width: 90px;">รับเข้าแล้ว</th>
+              <th style="width: 80px;">คงเหลือ</th>
+              <th style="width: 100px;">จำนวนที่มาส่ง</th>
+              <th style="width: 130px;">หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRows || `
+              <tr>
+                <td colspan="7" class="center">ไม่มีรายการสินค้า</td>
+              </tr>
+            `}
+          </tbody>
+        </table>
+
+        ${po.note ? `
+          <div class="note-box">
+            <strong>หมายเหตุ PO:</strong> ${escapeHtml(po.note)}
+          </div>
+        ` : `
+          <div class="note-box">
+            <strong>หมายเหตุ PO:</strong>
+          </div>
+        `}
+
+        <div class="signatures">
+          <div>
+            <div class="line">ผู้ตรวจรับสินค้า</div>
+          </div>
+          <div>
+            <div class="line">ผู้ส่งสินค้า / ผู้เกี่ยวข้อง</div>
+          </div>
+        </div>
+      </div>
+
+      <script>
+        window.onload = function () {
+          window.print();
+        };
+      </script>
+    </body>
+    </html>
+  `;
+
+  const printWindow = window.open('', '_blank');
+
+  if (!printWindow) {
+    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ PO', 'error');
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
 
 function printPickList(requestId) {
   const request = pendingTransfers.find((item) => item.requestId === requestId);
