@@ -2702,51 +2702,73 @@ button {
 }
 
 /* ===============================
-   Responsive Tab Layout
-   Staff 4 tabs / Admin 5 tabs
+   Final Mobile Tab Layout
+   Staff 4 tabs = 2 x 2
+   Admin/adminR 5 tabs = 2 x 2 + last center
 ================================ */
 
 .segmented-control {
   display: grid !important;
   gap: 10px !important;
+  align-items: stretch !important;
 }
 
-/* ค่าเริ่มต้น: เหมาะกับ staff 4 tabs */
-.segmented-control {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-}
-
-.segmented-control .segment {
-  width: 100% !important;
-  min-width: 0 !important;
-  justify-content: center !important;
-  text-align: center !important;
-  white-space: nowrap !important;
-  padding-left: 10px !important;
-  padding-right: 10px !important;
-}
-
-/* ถ้าเป็น admin/adminR มี 5 tabs */
-.segmented-control.tab-grid-five {
-  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-}
-
-/* มือถือ: แสดงบรรทัดละ 2 ปุ่ม */
-@media (max-width: 640px) {
+/* Desktop / จอใหญ่ */
+@media (min-width: 641px) {
   .segmented-control {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   }
 
-  .segmented-control .segment {
+  .segmented-control.tab-grid-five {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .segmented-control,
+  .segmented-control.mobile-two-row-tabs,
+  .segmented-control.segmented-control-5,
+  .segmented-control.tab-grid-five {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .segmented-control .segment:not([hidden]) {
+    width: 100% !important;
+    min-width: 0 !important;
     min-height: 58px !important;
     padding: 10px 8px !important;
-    font-size: 14px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
-  /* ถ้ามี 5 ปุ่ม ให้ปุ่มสุดท้ายอยู่กลาง */
+  .segmented-control .segment span:last-child {
+    display: inline-block !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    white-space: normal !important;
+    line-height: 1.2 !important;
+    font-size: 13px !important;
+  }
+
+  .segmented-control .segment-icon {
+    flex: 0 0 auto !important;
+  }
+
+  /* กรณี admin/adminR มี 5 ปุ่ม ให้ปุ่มสุดท้ายอยู่กลางแถวสุดท้าย */
   .segmented-control.tab-grid-five > .segment.is-last-single {
     grid-column: 1 / -1 !important;
     justify-self: center !important;
     width: calc((100% - 10px) / 2) !important;
   }
+}
+
+/* ซ่อน tab ที่ role นี้ไม่มีสิทธิ์ แม้มี display:flex !important */
+.segmented-control .segment[hidden],
+.segmented-control [hidden] {
+  display: none !important;
 }
