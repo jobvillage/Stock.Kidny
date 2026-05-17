@@ -586,6 +586,10 @@ async function submitPoCmo() {
     showToast(`✅ บันทึก PO สำเร็จ: ${data.po_id || ''}`, 'success');
 
     fetchPoStatus();
+    
+    if (typeof fetchPendingPoSummary === 'function') {
+      await fetchPendingPoSummary();
+    }
 
     const poNote = document.getElementById('po-note');
     if (poNote) poNote.value = '';

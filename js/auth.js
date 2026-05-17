@@ -9,7 +9,12 @@ const ROLE_PERMISSIONS = {
   stock_receiver: ['in', 'pending', 'po_status', 'stock'],
   center_staff: ['out', 'request_status', 'transfer', 'po_status'],
   committee: ['stock'],
-  admin: ['in', 'pending', 'po_status', 'stock', 'committee'],
+
+  // admin เปิด PO ได้ด้วย
+  admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'committee'],
+
+  // adminR เปิด PO + รับของ + ดูรายการขอเบิก + ดู stock ได้
+  adminR: ['in', 'pending', 'transfer', 'po_status', 'stock'],
 };
 
 function getPermissionsForRole(role) {
@@ -17,12 +22,14 @@ function getPermissionsForRole(role) {
 }
 
 function normalizeUser(user) {
+  const role = user.role || '';
+
   return {
     code: user.code || '',
     name: user.name || '',
-    role: user.role || '',
+    role,
     center: user.center || '',
-    permissions: user.permissions || getPermissionsForRole(user.role),
+    permissions: getPermissionsForRole(role),
   };
 }
 
@@ -160,7 +167,7 @@ function applyRolePageLabels() {
   const transferTitle = document.querySelector('#panel-transfer h2');
   const transferDesc = document.querySelector('#panel-transfer .panel-title p');
 
-  if (currentUser?.role === 'center_staff') {
+  if (['center_staff', 'admin', 'adminR'].includes(currentUser?.role)) {
     if (transferTabText) transferTabText.textContent = 'เปิด PO';
     if (transferTitle) transferTitle.textContent = 'เปิด PO';
     if (transferDesc) transferDesc.textContent = 'เปิด PO / คำขอ PO เพื่อส่งรายการให้ผู้จัดของ';
@@ -254,6 +261,23 @@ function applyPermissionUI() {
     button.disabled = !allowed;
     button.classList.toggle('is-disabled', !allowed);
   });
+
+  const tabBox = document.querySelector('.segment')?.parentElement;
+
+  if (tabBox) {
+    const visibleTabs = Array.from(tabBox.querySelectorAll('.segment'))
+      .filter((btn) => !btn.hidden);
+
+    tabBox.classList.toggle('tab-grid-five', visibleTabs.length === 5);
+
+    visibleTabs.forEach((btn) => {
+      btn.classList.remove('is-last-single');
+    });
+
+    if (visibleTabs.length === 5) {
+      visibleTabs[4].classList.add('is-last-single');
+    }
+  }
 
   const firstAllowedTab = currentUser.permissions[0] || 'in';
   switchTab(firstAllowedTab, true);
