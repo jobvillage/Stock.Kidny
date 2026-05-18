@@ -1540,18 +1540,62 @@ button {
   opacity: 1 !important;
 }
 
-.ts-dropdown .option[data-value=""] {
-  display: none !important;
+.stock-product-filter-select {
+  padding-right: 32px;
+  position: relative;
+}
+
+.stock-product-filter-select .ts-control {
+  overflow: visible;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.stock-product-filter-select:not(.has-items) .ts-control input {
+  color: var(--text);
+  opacity: 1;
+}
+
+.stock-product-filter-select:not(.has-items) .ts-control input::placeholder {
+  color: #9aa2b1 !important;
+  opacity: 1 !important;
+}
+
+.stock-product-filter-select.has-items .ts-control input {
+  position: absolute;
+  width: 1px !important;
+  min-width: 1px !important;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stock-product-filter-select.plugin-clear_button .clear-button {
+  position: absolute;
+  right: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(23, 32, 51, 0.06);
+  color: #64748b;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 1;
 }
 
 /* ===== Stock Request / Pending Pick ===== */
 .stock-request-card {
   border-radius: 26px;
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-soft);
   padding: 18px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  overflow: hidden;
 }
 
 .stock-request-head {
@@ -1621,7 +1665,7 @@ button {
 
 .pick-item-row {
   display: grid;
-  grid-template-columns: 1fr 110px;
+  grid-template-columns: minmax(0, 1fr) 150px 112px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -1644,7 +1688,7 @@ button {
 }
 
 .pick-item-qty label {
-  display: block;
+  display: none;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
@@ -1653,7 +1697,7 @@ button {
 }
 
 .pick-item-qty input {
-  width: 100%;
+  width: 72px;
   min-height: 36px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -1666,7 +1710,7 @@ button {
 .pick-item-qty {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
 }
 
@@ -1701,7 +1745,8 @@ button {
   }
 
   .pick-item-row {
-    grid-template-columns: 1fr 110px;
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .stock-request-actions {
@@ -1713,6 +1758,24 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.pick-item-source {
+  min-width: 0;
+}
+
+.pick-stock-location {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 6px 10px;
+  color: var(--text);
+  background: #fff;
+  font-weight: 700;
+  outline: none;
 }
 
 .prepared-qty-input {
@@ -1733,6 +1796,7 @@ button {
 }
 
 .btn-edit-qty {
+  flex: 0 0 34px;
   width: 34px;
   height: 34px;
   border: 0;
@@ -1743,6 +1807,36 @@ button {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .pick-item-qty {
+    align-items: stretch;
+  }
+
+  .pick-qty-edit-row {
+    justify-content: flex-start;
+  }
+
+  .pick-stock-location {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+#pending-transfers .po-items-head {
+  grid-template-columns: minmax(0, 1fr) 150px 112px;
+}
+
+#pending-transfers .po-items-head div:nth-child(2),
+#pending-transfers .po-items-head div:nth-child(3) {
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  #pending-transfers .po-items-head {
+    display: none;
+  }
 }
 
 .btn-edit-qty.is-editing {
@@ -2012,17 +2106,6 @@ button {
   padding: 12px;
 }
 
-/* แยกกล่องแต่ละ PO ให้ชัดเจน */
-.stock-request-card {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--border);
-  border-radius: 26px;
-  padding: 18px;
-  margin-bottom: 18px;
-  box-shadow: var(--shadow-soft);
-  overflow: hidden;
-}
-
 /* ไม่ให้ตารางรายการสินค้าชนขอบกล่อง */
 .stock-request-items {
   margin-top: 16px;
@@ -2062,26 +2145,6 @@ button {
   background: rgba(22, 199, 132, 0.12);
 }
 
-.po-partial-row {
-  display: grid;
-  grid-template-columns: 1fr 80px 70px;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--border);
-}
-
-.po-partial-qty {
-  width: 100%;
-  min-height: 36px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 6px 8px;
-  text-align: center;
-  font-weight: 700;
-  outline: none;
-}
-
 .po-receive-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2094,21 +2157,6 @@ button {
   width: 100%;
   min-height: 44px;
   border-radius: 16px;
-}
-
-.po-partial-head,
-.po-partial-row {
-  grid-template-columns: 1fr 80px 70px 80px !important;
-}
-
-.btn-save-partial-line {
-  min-height: 36px;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(22, 199, 132, 0.12);
-  color: var(--accent-in-dark);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .po-receive-actions.is-partial-mode {
@@ -2185,102 +2233,6 @@ button {
   }
 }
 
-.stock-split-table {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(160px, 220px) 1fr;
-  background: #ffffff;
-  border-radius: 18px;
-  overflow: hidden;
-  border: 1px solid #e5e7eb;
-}
-
-.stock-fixed-side {
-  background: #ffffff;
-  z-index: 2;
-  box-shadow: 6px 0 12px rgba(15, 23, 42, 0.04);
-}
-
-.stock-scroll-side {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.stock-scroll-inner {
-  min-width: 390px;
-}
-
-.stock-fixed-head,
-.stock-scroll-head > div {
-  background: #f1f5f9;
-  color: #0f172a;
-  font-weight: 900;
-}
-
-.stock-fixed-head,
-.stock-fixed-cell {
-  min-height: 72px;
-  padding: 16px 14px;
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid #e5e7eb;
-  font-weight: 900;
-  color: #0f172a;
-}
-
-.stock-scroll-row {
-  display: grid;
-  grid-template-columns: 110px 140px 140px;
-}
-
-.stock-scroll-row > div {
-  min-height: 72px;
-  padding: 16px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  border-bottom: 1px solid #e5e7eb;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.stock-col-po {
-  color: #d97706;
-}
-
-.stock-col-hub,
-.stock-col-main {
-  color: #0f172a;
-}
-
-/* มือถือ: ชื่อสินค้าค้างซ้าย และเลื่อนเฉพาะ 3 ช่องขวา */
-@media (max-width: 640px) {
-  .stock-split-table {
-    grid-template-columns: 155px 1fr;
-  }
-
-  .stock-scroll-inner {
-    min-width: 390px;
-  }
-
-  .stock-scroll-row {
-    grid-template-columns: 100px 140px 140px;
-  }
-
-  .stock-fixed-head,
-  .stock-fixed-cell,
-  .stock-scroll-row > div {
-    min-height: 78px;
-    padding: 14px 12px;
-  }
-
-  .stock-fixed-cell {
-    font-size: 15px;
-    line-height: 1.35;
-  }
-}
-
 .po-qty {
   color: #d97706;
   font-weight: 800;
@@ -2288,7 +2240,7 @@ button {
 }
 
 /* ===============================
-   Fix stock split table alignment
+   Stock Split Table
 ================================ */
 
 .stock-split-table {
@@ -2342,15 +2294,12 @@ button {
 .stock-fixed-cell {
   background: #ffffff;
   color: #0f172a;
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
   line-height: 1.3;
   overflow: hidden;
-}
-
-.stock-fixed-cell {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  word-break: break-word;
 }
 
 .stock-scroll-row {
@@ -2441,83 +2390,6 @@ button {
   .stock-scroll-row {
     grid-template-columns: repeat(3, minmax(120px, 1fr));
   }
-}
-
-/* ===============================
-   PO Partial Receive Table
-   สินค้า | PO เดิม | รับเข้าแล้ว | คงเหลือ | รับเข้าครั้งนี้ | บันทึก
-================================ */
-
-.po-partial-table {
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.po-partial-grid {
-  display: grid !important;
-  grid-template-columns: minmax(180px, 1.7fr) 90px 110px 100px 140px 100px !important;
-  align-items: center;
-  gap: 8px;
-  min-width: 760px;
-}
-
-.po-partial-head {
-  background: #f1f5f9;
-  color: #64748b;
-  font-weight: 800;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.po-partial-head > div,
-.po-partial-row > div {
-  padding: 12px 10px;
-  box-sizing: border-box;
-}
-
-.po-partial-row {
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.po-partial-row .po-item-name {
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.po-partial-row .po-item-qty {
-  text-align: center;
-  font-weight: 900;
-  color: #0f172a;
-}
-
-.po-receive-input-cell {
-  display: flex;
-  justify-content: center;
-}
-
-.po-partial-qty {
-  width: 100%;
-  max-width: 120px;
-  height: 44px;
-  text-align: center;
-  border: 1px solid #dbe3ef;
-  border-radius: 14px;
-  font-weight: 800;
-}
-
-.po-save-cell {
-  display: flex;
-  justify-content: center;
-}
-
-.btn-save-partial-line {
-  min-width: 86px;
-  height: 44px;
-  border: 0;
-  border-radius: 14px;
-  background: #dff8ee;
-  color: #059669;
-  font-weight: 900;
 }
 
 .po-edit-footer {

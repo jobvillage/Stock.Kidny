@@ -25,13 +25,16 @@ function refreshStockProductFilter() {
   if (!select) return;
 
   const oldValue = select.value;
+  if (select.tomselect) {
+    select.tomselect.destroy();
+  }
 
   const products = [...new Set(PRODUCTS || [])]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b, 'th'));
 
   select.innerHTML = `
-    <option value="">ทุกสินค้า</option>
+    <option value=""></option>
     ${products.map((product) => `
       <option value="${escapeHtml(product)}">${escapeHtml(product)}</option>
     `).join('')}
@@ -39,7 +42,40 @@ function refreshStockProductFilter() {
 
   if (oldValue && products.includes(oldValue)) {
     select.value = oldValue;
+  } else {
+    select.value = '';
   }
+
+  enhanceStockProductFilter(select);
+}
+
+function enhanceStockProductFilter(select) {
+  if (!select || select.tomselect || typeof TomSelect === 'undefined') return;
+
+  const ts = new TomSelect(select, {
+    create: false,
+    allowEmptyOption: true,
+    plugins: ['clear_button'],
+    maxOptions: 80,
+    dropdownParent: 'body',
+    placeholder: 'พิมพ์หรือเลือกสินค้า',
+    openOnFocus: true,
+    onFocus: function () {
+      this.open();
+    },
+    onDropdownOpen: function () {
+      if (typeof positionTomSelectDropdown === 'function') {
+        positionTomSelectDropdown(this);
+      }
+    },
+  });
+
+  if (!select.value) {
+    ts.clear(true);
+  }
+
+  ts.wrapper.classList.add('stock-product-filter-select');
+  ts.control_input.setAttribute('placeholder', 'พิมพ์หรือเลือกสินค้า');
 }
 
 const formRequestIds = {

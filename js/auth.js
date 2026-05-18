@@ -7,7 +7,7 @@ let currentUser = null;
 
 const ROLE_PERMISSIONS = {
   stock_receiver: ['in', 'pending', 'po_status', 'stock'],
-  center_staff: ['out', 'request_status', 'transfer', 'po_status'],
+  center_staff: ['out', 'request_status', 'transfer', 'po_status', 'stock'],
   committee: ['stock'],
 
   // admin เปิด PO ได้ด้วย
@@ -285,10 +285,12 @@ function applyPermissionUI() {
   if (currentUser.role === 'center_staff') {
     lockSelectToValue('out-center', currentUser.center);
     lockSelectToValue('transfer-from-center', currentUser.center);
+    unlockSelect('stock-center-filter');
     filterTransferTargetCenters();
   } else {
     unlockSelect('out-center');
     unlockSelect('transfer-from-center');
+    unlockSelect('stock-center-filter');
   }
 }
 

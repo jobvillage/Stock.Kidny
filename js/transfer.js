@@ -103,6 +103,22 @@ function resetTransferForm() {
 // =====================
 // PENDING TRANSFERS
 // =====================
+function getPickStockLocations() {
+  const locations = Array.isArray(window.CENTERS) && window.CENTERS.length
+    ? window.CENTERS
+    : ['Hub Admin', 'สต็อกใหญ่'];
+
+  return [...new Set(locations)].filter(Boolean);
+}
+
+function renderPickLocationOptions(selectedValue = 'สต็อกใหญ่') {
+  return getPickStockLocations().map((center) => `
+    <option value="${escapeHtml(center)}"${center === selectedValue ? ' selected' : ''}>
+      ${escapeHtml(center)}
+    </option>
+  `).join('');
+}
+
 function renderPendingTransfers(errorMessage = '') {
   const box = document.getElementById('pending-transfers');
   const badge = document.getElementById('pending-badge');
@@ -134,6 +150,18 @@ function renderPendingTransfers(errorMessage = '') {
           <div class="pick-item-name">
             <strong>${escapeHtml(product)}</strong>
             <small>จำนวนที่ขอ: ${qty} ชิ้น</small>
+          </div>
+
+          <div class="pick-item-source">
+            <select
+              class="pick-stock-location"
+              data-request-id="${escapeHtml(request.requestId)}"
+              data-product="${escapeHtml(product)}"
+              data-index="${index}"
+              aria-label="เลือกสต็อกที่จะตัด"
+            >
+              ${renderPickLocationOptions(item.source_center || item.sourceCenter || item.center || 'สต็อกใหญ่')}
+            </select>
           </div>
 
           <div class="pick-item-qty">
@@ -207,8 +235,8 @@ function renderPendingTransfers(errorMessage = '') {
           <div class="po-items-table">
             <div class="po-items-head">
               <div>สินค้า</div>
+              <div>ตัดจากสต็อก</div>
               <div>จำนวน</div>
-              <div>หน่วย</div>
             </div>
 
             ${itemRows}
@@ -402,14 +430,53 @@ async function completeStockRequest(requestId) {
   const inputs = card.querySelectorAll('.prepared-qty-input');
 
   const items = Array.from(inputs)
-    .map((input) => ({
-      product: input.dataset.product,
-      qty: Number(input.value) || 0,
-    }))
+    .map((input) => {
+      const row = input.closest('.pick-item-row');
+      const sourceCenter = row?.querySelector('.pick-stock-location')?.value || 'สต็อกใหญ่';
+
+      return {
+        product: input.dataset.product,
+        qty: Number(input.value) || 0,
+        source_center: sourceCenter,
+        sourceCenter,
+        stock_center: sourceCenter,
+        center: sourceCenter,
+      };
+    })
     .filter((item) => item.product && item.qty > 0);
 
   if (items.length === 0) {
     showToast('⚠️ กรุณาระบุจำนวนที่จัดอย่างน้อย 1 รายการ', 'error');
+    return;
+  }
+
+  const stockCheckMap = new Map();
+  items.forEach((item) => {
+    const key = `${item.source_center}::${item.product}`;
+    const currentQty = stockCheckMap.get(key)?.qty || 0;
+    stockCheckMap.set(key, {
+      sourceCenter: item.source_center,
+      product: item.product,
+      qty: currentQty + item.qty,
+    });
+  });
+
+  const stockCheck = Array.from(stockCheckMap.values()).reduce((result, item) => {
+    if (!result.ok) return result;
+
+    const availableQty = (localStock[item.sourceCenter] || {})[item.product] || 0;
+    if (item.qty > availableQty) {
+      return {
+        ok: false,
+        message: `⚠️ ${item.product} (${item.sourceCenter}): จำนวนไม่พอ มี ${availableQty} ชิ้น`,
+      };
+    }
+
+    return result;
+  }, { ok: true, message: '' });
+
+  if (!stockCheck.ok) {
+    showToast(stockCheck.message, 'error');
     return;
   }
 

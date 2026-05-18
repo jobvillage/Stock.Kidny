@@ -204,7 +204,8 @@ function getStockCenterFilter() {
 }
 
 function getStockProductFilter() {
-  return document.getElementById('stock-product-filter')?.value || '';
+  const value = document.getElementById('stock-product-filter')?.value || '';
+  return value === '__all__' ? '' : value;
 }
 
 function renderStockDashboard() {
@@ -213,7 +214,7 @@ function renderStockDashboard() {
 
   try {
     const selectedCenter = document.getElementById('stock-center-filter')?.value || '';
-    const selectedProduct = document.getElementById('stock-product-filter')?.value || '';
+    const selectedProduct = getStockProductFilter();
 
     let productList = [
       ...Object.keys(localStock['Hub Admin'] || {}),
