@@ -204,6 +204,7 @@ function bindStaticEvents() {
   document.getElementById('hub-product-filter')?.addEventListener('change', renderHubStockDashboard);
   document.getElementById('btn-refresh-po-status')?.addEventListener('click', fetchPoStatus);
   document.getElementById('btn-refresh-request-status')?.addEventListener('click', fetchRequestStatus);
+  document.getElementById('btn-refresh-stock-view')?.addEventListener('click', refreshStockViewOnly);
 }
 
 document.addEventListener('keydown', (event) => {

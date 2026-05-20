@@ -409,6 +409,10 @@ button {
   grid-template-columns: 1fr 116px 96px 40px;
 }
 
+.products-columns-out {
+  grid-template-columns: 1fr 116px 96px 40px;
+}
+
 .products-columns span {
   color: var(--text-dim);
   font-size: 11px;
@@ -442,6 +446,10 @@ button {
 
 .product-row.row-out {
   grid-template-columns: 1fr 96px 40px;
+}
+
+#out-products .product-row.row-out {
+  grid-template-columns: 1fr 116px 96px 40px;
 }
 
 .inline-stock,
@@ -696,6 +704,10 @@ button {
     display: none;
   }
 
+  .products-columns-out {
+    display: none;
+  }
+
   .product-row.row-in {
     grid-template-columns: 1fr 90px 40px;
     grid-template-areas:
@@ -729,8 +741,37 @@ button {
     grid-area: remove;
   }
 
-  .product-row.row-out {
-    grid-template-columns: 1fr 86px 40px;
+  #out-products .product-row.row-out {
+    grid-template-columns: 1fr 90px 40px;
+    grid-template-areas:
+      'product qty remove'
+      'stock qty remove';
+    align-items: start;
+  }
+
+  #out-products .product-row.row-out select {
+    grid-area: product;
+  }
+
+  #out-products .product-row.row-out .inline-stock {
+    grid-area: stock;
+    min-height: 40px;
+    place-items: start;
+    padding: 8px 12px;
+    text-align: left;
+  }
+
+  #out-products .product-row.row-out .inline-stock .qty-val,
+  #out-products .product-row.row-out .inline-stock .qty-label {
+    display: inline-block;
+  }
+
+  #out-products .product-row.row-out > input {
+    grid-area: qty;
+  }
+
+  #out-products .product-row.row-out .btn-remove-row {
+    grid-area: remove;
   }
 
   .stock-info {
@@ -766,7 +807,7 @@ button {
     grid-template-columns: 1fr 78px 38px;
   }
 
-  .product-row.row-out {
+  #out-products .product-row.row-out {
     grid-template-columns: 1fr 78px 38px;
   }
 
@@ -2371,9 +2412,10 @@ button {
   /* ฝั่งตัวเลขและหัวคอลัมน์ด้านขวา */
   .stock-scroll-head > div,
   .stock-scroll-row > div {
-    justify-content: flex-end;
-    text-align: right;
-    padding-right: 20px;
+    justify-content: center;
+    text-align: center;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   /* ให้พื้นที่ฝั่งขวากินเต็ม */
@@ -2388,7 +2430,7 @@ button {
 
   /* กระจาย 3 ช่องด้านขวาให้เต็มพื้นที่ */
   .stock-scroll-row {
-    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    grid-template-columns: repeat(var(--stock-col-count, 3), minmax(120px, 1fr));
   }
 }
 

@@ -6,7 +6,7 @@ function startRealtime() {
   if (!currentUser) return;
 
   // Admin/adminR: ฟังใบเบิกรอจัดของ
-  if (currentUser.role === 'admin' || currentUser.role === 'stock_receiver') {
+  if (['admin', 'adminR', 'stock_receiver'].includes(currentUser.role)) {
     const requestChannel = supabaseClient
       .channel('stock-requests-pending')
       .on(
@@ -30,10 +30,10 @@ function startRealtime() {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'stock_items',
-          filter: 'center=in.(สต็อกใหญ่,Hub Admin)',
+          filter: 'center=in.(สต็อกใหญ่,Hub Admin,ไตบน,ไตล่าง,ไตดี)',
         },
         () => {
           fetchStock();

@@ -54,7 +54,9 @@ async function fetchStock() {
     localStock = {};
 
     (data || []).forEach((item) => {
-      const center = item.center;
+      const center = typeof normalizeCenterName === 'function'
+        ? normalizeCenterName(item.center)
+        : item.center;
       const product = item.product;
 
       if (!localStock[center]) {

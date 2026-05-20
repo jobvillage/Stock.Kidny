@@ -7,16 +7,40 @@ var TRANSFER_CACHE_KEY = window.TRANSFER_CACHE_KEY || 'stockAppCachedPendingTran
 
 var CENTERS = window.CENTERS || [
   'Hub Admin',
-  'สต็อกใหญ่'
+  'สต็อกใหญ่',
+  'ไตบน',
+  'ไตล่าง',
+  'ไตดี'
 ];
 
 var PRODUCTS = window.PRODUCTS || [];
+var STAFF_CENTER_BY_CODE = window.STAFF_CENTER_BY_CODE || {
+  staff1: 'ไตบน',
+  staff2: 'ไตล่าง',
+  staff3: 'ไตดี',
+};
 
 window.SESSION_KEY = SESSION_KEY;
 window.STOCK_CACHE_KEY = STOCK_CACHE_KEY;
 window.TRANSFER_CACHE_KEY = TRANSFER_CACHE_KEY;
 window.CENTERS = CENTERS;
 window.PRODUCTS = PRODUCTS;
+window.STAFF_CENTER_BY_CODE = STAFF_CENTER_BY_CODE;
+
+function normalizeCenterName(center) {
+  const raw = String(center || '').trim();
+  const key = raw.toLowerCase().replace(/\s+/g, ' ');
+
+  if (key === 'hub admin') return 'Hub Admin';
+  if (raw === 'สต็อกใหญ่') return 'สต็อกใหญ่';
+  if (raw === 'ไตบน') return 'ไตบน';
+  if (raw === 'ไตล่าง') return 'ไตล่าง';
+  if (raw === 'ไตดี') return 'ไตดี';
+
+  return raw;
+}
+
+window.normalizeCenterName = normalizeCenterName;
 
 function escapeHtml(value) {
   return String(value ?? '')

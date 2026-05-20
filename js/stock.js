@@ -208,6 +208,16 @@ function getStockProductFilter() {
   return value === '__all__' ? '' : value;
 }
 
+function getAllStockCenters() {
+  const configuredCenters = Array.isArray(window.CENTERS) ? window.CENTERS : [];
+  const stockCenters = Object.keys(localStock || {}).map((center) => (
+    typeof normalizeCenterName === 'function' ? normalizeCenterName(center) : center
+  ));
+
+  return [...new Set([...configuredCenters, ...stockCenters])]
+    .filter(Boolean);
+}
+
 function renderStockDashboard() {
   const box = document.getElementById('stock-dashboard-grid');
   if (!box) return;
@@ -216,9 +226,10 @@ function renderStockDashboard() {
     const selectedCenter = document.getElementById('stock-center-filter')?.value || '';
     const selectedProduct = getStockProductFilter();
 
+    const stockCenters = getAllStockCenters();
+
     let productList = [
-      ...Object.keys(localStock['Hub Admin'] || {}),
-      ...Object.keys(localStock['สต็อกใหญ่'] || {}),
+      ...stockCenters.flatMap((center) => Object.keys(localStock[center] || {})),
       ...Object.keys(pendingPoSummary || {})
     ];
 
@@ -237,23 +248,16 @@ function renderStockDashboard() {
 
     let columns = [];
 
-    if (!selectedCenter || selectedCenter === 'Hub Admin') {
-      columns.push({
-        key: 'hub',
-        label: 'Hub Admin',
-        className: 'stock-col-hub',
-        getValue: (product) => Number(localStock['Hub Admin']?.[product] || 0)
-      });
-    }
+    stockCenters.forEach((center) => {
+      if (selectedCenter && selectedCenter !== center) return;
 
-    if (!selectedCenter || selectedCenter === 'สต็อกใหญ่') {
       columns.push({
-        key: 'main',
-        label: 'สต็อกใหญ่',
-        className: 'stock-col-main',
-        getValue: (product) => Number(localStock['สต็อกใหญ่']?.[product] || 0)
+        key: `stock-${center}`,
+        label: center,
+        className: center === 'Hub Admin' ? 'stock-col-hub' : 'stock-col-main',
+        getValue: (product) => Number(localStock[center]?.[product] || 0)
       });
-    }
+    });
 
     // เปิด PO ให้อยู่ช่องสุดท้ายเสมอ
     columns.push({
@@ -263,9 +267,7 @@ function renderStockDashboard() {
       getValue: (product) => Number(pendingPoSummary?.[product] || 0)
     });
 
-    const gridTemplate = columns
-      .map((col) => col.key === 'po' ? 'minmax(90px, 0.8fr)' : 'minmax(130px, 1fr)')
-      .join(' ');
+    const gridTemplate = `repeat(${columns.length}, minmax(120px, 1fr))`;
 
     const fixedRows = productList.map((product) => `
       <div class="stock-fixed-cell">
@@ -290,7 +292,7 @@ function renderStockDashboard() {
     `).join('');
 
     box.innerHTML = `
-      <div class="stock-split-table">
+      <div class="stock-split-table" style="--stock-col-count: ${columns.length};">
         <div class="stock-fixed-side">
           <div class="stock-fixed-head">รายการสินค้า</div>
           ${fixedRows}
@@ -345,6 +347,33 @@ async function fetchStockViewTransfers() {
     console.error('Stock view transfer error:', error);
     stockViewTransfers = [];
     box.innerHTML = `<div class="empty-state error-state">${escapeHtml(error.message || 'โหลดรายการ Transfer ไม่สำเร็จ')}</div>`;
+  }
+}
+
+async function refreshStockViewOnly() {
+  const button = document.getElementById('btn-refresh-stock-view');
+  if (button) button.disabled = true;
+
+  try {
+    if (typeof fetchStock === 'function') {
+      await fetchStock();
+    }
+
+    if (typeof fetchPendingPoSummary === 'function') {
+      await fetchPendingPoSummary();
+    }
+
+    if (typeof fetchStockViewTransfers === 'function') {
+      await fetchStockViewTransfers();
+    }
+
+    renderStockDashboard();
+    showToast('✅ รีเฟรชสต็อกแล้ว', 'success');
+  } catch (error) {
+    console.error('refreshStockViewOnly error:', error);
+    showToast(`❌ ${error.message || 'รีเฟรชสต็อกไม่สำเร็จ'}`, 'error');
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 

@@ -185,6 +185,33 @@ function addProductRow(type) {
     return;
   }
 
+  if (type === 'out') {
+    row.innerHTML = `
+      <select class="product-select" aria-label="เลือกรายการสินค้า">
+        <option value=""></option>
+        ${getProductOptions()}
+      </select>
+      <div class="inline-stock" aria-label="คงเหลือเดิม">
+        <span class="qty-val">—</span>
+        <span class="qty-label">ชิ้น</span>
+      </div>
+      <input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" placeholder="จำนวน" aria-label="จำนวน" />
+      <button class="btn-remove-row" type="button" title="ลบรายการ" aria-label="ลบรายการ">×</button>
+    `;
+
+    const productSelect = row.querySelector('.product-select');
+
+    productSelect.addEventListener('change', (event) => {
+      updateStockInfo(event.currentTarget);
+    });
+
+    row.querySelector('.btn-remove-row').addEventListener('click', (event) => removeRow(event.currentTarget));
+
+    container.appendChild(row);
+    enhanceProductSelect(productSelect);
+    return;
+  }
+
   row.innerHTML = `
     <select class="product-select" aria-label="เลือกรายการสินค้า">
       <option value=""></option>
@@ -236,43 +263,55 @@ function positionTomSelectDropdown(ts) {
     const controlRect = ts.control.getBoundingClientRect();
     const dropdown = ts.dropdown;
 
-    const dropdownHeight = dropdown.offsetHeight || 260;
     const spaceBelow = window.innerHeight - controlRect.bottom;
-    const spaceAbove = controlRect.top;
+    const maxDropdownHeight = Math.max(160, Math.min(280, spaceBelow - 12));
 
     dropdown.style.position = 'absolute';
     dropdown.style.left = `${controlRect.left + window.scrollX}px`;
     dropdown.style.width = `${controlRect.width}px`;
     dropdown.style.zIndex = '9999';
-
-    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
-      dropdown.style.top = `${controlRect.top + window.scrollY - dropdownHeight - 6}px`;
-    } else {
-      dropdown.style.top = `${controlRect.bottom + window.scrollY + 6}px`;
-    }
+    dropdown.style.top = `${controlRect.bottom + window.scrollY + 6}px`;
+    dropdown.style.maxHeight = `${maxDropdownHeight}px`;
+    dropdown.style.overflowY = 'auto';
   });
 }
 
 function updateStockInfo(select) {
   const row = select.closest('.product-row');
   const next = row?.nextElementSibling;
-  if (!next || !next.classList.contains('stock-info')) return;
-
-    // ซ่อนช่องคงเหลือสำหรับ Staff
-  if (currentUser?.role === 'center_staff') {
-    next.style.display = 'none';
-    return;
-  }
+  const inlineBadge = row?.querySelector('.inline-stock');
 
   const product = select.value;
   if (!product) {
-    next.style.display = 'none';
+    if (inlineBadge) {
+      const valEl = inlineBadge.querySelector('.qty-val');
+      if (valEl) {
+        valEl.textContent = '—';
+        valEl.className = 'qty-val';
+      }
+    }
+
+    if (next?.classList.contains('stock-info')) {
+      next.style.display = 'none';
+    }
+
     return;
   }
 
   const stock = getStockForCenter('out');
   const qty = stock[product] || 0;
   const cls = qty <= 0 ? 'empty' : qty <= 5 ? 'low' : 'ok';
+
+  if (inlineBadge) {
+    const valEl = inlineBadge.querySelector('.qty-val');
+    if (valEl) {
+      valEl.textContent = qty;
+      valEl.className = `qty-val ${cls}`;
+    }
+    return;
+  }
+
+  if (!next || !next.classList.contains('stock-info')) return;
 
   next.style.display = 'flex';
   next.innerHTML = `สินค้า: <strong>${escapeHtml(product)}</strong> <span aria-hidden="true">|</span> คงเหลือ: <span class="val ${cls}">${qty} ชิ้น</span>`;

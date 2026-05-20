@@ -82,6 +82,24 @@ async function submitTransfer() {
   }
 }
 
+const PO_CENTER_CACHE_KEY = 'po_center_cache_v1';
+
+function getPoCenterCache() {
+  try {
+    return JSON.parse(localStorage.getItem(PO_CENTER_CACHE_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function savePoCenterToCache(poId, center) {
+  if (!poId || !center) return;
+
+  const cache = getPoCenterCache();
+  cache[poId] = center;
+  localStorage.setItem(PO_CENTER_CACHE_KEY, JSON.stringify(cache));
+}
+
 function resetTransferForm() {
   const productContainer = document.getElementById('transfer-products');
   productContainer.innerHTML = '';
@@ -160,7 +178,7 @@ function renderPendingTransfers(errorMessage = '') {
               data-index="${index}"
               aria-label="เลือกสต็อกที่จะตัด"
             >
-              ${renderPickLocationOptions(item.source_center || item.sourceCenter || item.center || 'สต็อกใหญ่')}
+              ${renderPickLocationOptions(item.source_center || item.sourceCenter || item.center || request.center || 'สต็อกใหญ่')}
             </select>
           </div>
 
@@ -515,6 +533,12 @@ function renderPoCmoForm() {
   const panel = document.getElementById('panel-transfer');
   if (!panel) return;
 
+  const poCenterOptions = getPickStockLocations().map((center) => `
+    <option value="${escapeHtml(center)}"${center === currentUser?.center ? ' selected' : ''}>
+      ${escapeHtml(center)}
+    </option>
+  `).join('');
+
   panel.innerHTML = `
     <div class="panel-title">
       <span class="title-icon transfer">📝</span>
@@ -535,9 +559,17 @@ function renderPoCmoForm() {
         <input type="text" id="po-person" placeholder="กรอกชื่อผู้เปิด PO"/>
       </div>
 
+      <div class="field-group">
+        <label for="po-center">ศูนย์ที่จะรับเข้า</label>
+        <select id="po-center">
+          <option value="">— เลือกศูนย์ —</option>
+          ${poCenterOptions}
+        </select>
+      </div>
+
       <div class="field-group field-group-full">
         <label for="po-note">หมายเหตุ</label>
-        <input type="text" id="po-person" placeholder="หมายเหตุ"/>
+        <input type="text" id="po-note" placeholder="หมายเหตุ"/>
       </div>
     </div>
 
@@ -562,11 +594,61 @@ function renderPoCmoForm() {
   `;
 
   setToday('po-date');
+  if (currentUser?.role === 'center_staff' && currentUser.center) {
+    lockSelectToValue('po-center', currentUser.center);
+  }
 
   document.getElementById('btn-add-po-row')?.addEventListener('click', addPoRow);
   document.getElementById('btn-submit-po')?.addEventListener('click', submitPoCmo);
 
   addPoRow();
+}
+
+function getPoCenter(po = {}) {
+  const poId = po.po_id || po.poId || po.po_no || po.poNo || po.request_id || po.id || '';
+  const centerFromCache = getPoCenterCache()[poId] || '';
+  const items = Array.isArray(po.items) ? po.items : [];
+  const centerFromItems = items
+    .map((item) => item.center || item.stock_center || item.stockCenter || '')
+    .find(Boolean) || '';
+
+  const staffCode = String(
+    po.staff_code
+    || po.staffCode
+    || po.created_by_code
+    || po.createdByCode
+    || po.user_code
+    || po.userCode
+    || ''
+  ).trim().toLowerCase();
+
+  const centerByStaffCode = window.STAFF_CENTER_BY_CODE?.[staffCode] || '';
+
+  return po.center
+    || po.stock_center
+    || po.stockCenter
+    || po.receive_center
+    || po.receiveCenter
+    || po.request_center
+    || po.requestCenter
+    || po.created_by_center
+    || po.createdByCenter
+    || po.po_center
+    || po.poCenter
+    || centerFromCache
+    || centerFromItems
+    || centerByStaffCode
+    || (currentUser?.role === 'center_staff' ? currentUser.center : '')
+    || '';
+}
+
+function isRpcSignatureError(error) {
+  const text = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  return /PGRST202|function .* not found|Could not find|schema cache|parameter|argument/i.test(text);
+}
+
+function canReceivePo() {
+  return ['admin', 'adminR', 'stock_receiver'].includes(currentUser?.role);
 }
 
 function addPoRow() {
@@ -603,6 +685,7 @@ async function submitPoCmo() {
 
   const date = document.getElementById('po-date')?.value;
   const person = document.getElementById('po-person')?.value.trim() || '';
+  const center = document.getElementById('po-center')?.value || currentUser?.center || '';
   const note = document.getElementById('po-note')?.value.trim() || '';
   const rows = document.querySelectorAll('#po-products .product-row');
 
@@ -610,7 +693,7 @@ async function submitPoCmo() {
     const product = row.querySelector('select')?.value || '';
     const qty = Number(row.querySelector('input[type="number"]')?.value) || 0;
 
-    return { product, qty };
+    return { product, qty, center, stock_center: center };
   }).filter((item) => item.product && item.qty > 0);
 
   if (!date) {
@@ -624,6 +707,12 @@ async function submitPoCmo() {
     return;
   }
 
+  if (!center) {
+    showToast('⚠️ กรุณาเลือกศูนย์ที่จะรับสินค้าเข้า', 'error');
+    document.getElementById('po-center')?.focus();
+    return;
+  }
+
   if (items.length === 0) {
     showToast('⚠️ กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ', 'error');
     return;
@@ -633,14 +722,24 @@ async function submitPoCmo() {
   showToast('', 'loading', 'กำลังบันทึกรายการเปิด PO...');
 
   try {
-    const { data, error } = await supabaseClient.rpc('create_po_cmo', {
+    const createPoParams = {
       p_client_request_id: newRequestId('po'),
       p_staff_code: currentUser?.code || '',
       p_date: date,
       p_person: person,
+      p_center: center,
       p_note: note,
       p_items: items,
-    });
+    };
+
+    let { data, error } = await supabaseClient.rpc('create_po_cmo', createPoParams);
+
+    if (error && isRpcSignatureError(error)) {
+      const { p_center, ...fallbackParams } = createPoParams;
+      const fallback = await supabaseClient.rpc('create_po_cmo', fallbackParams);
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       throw error;
@@ -651,6 +750,8 @@ async function submitPoCmo() {
     }
 
     showToast(`✅ บันทึก PO สำเร็จ: ${data.po_id || ''}`, 'success');
+
+    savePoCenterToCache(data.po_id || data.poId || data.po_no || data.poNo || '', center);
 
     fetchPoStatus();
     
@@ -663,6 +764,9 @@ async function submitPoCmo() {
 
     const poPerson = document.getElementById('po-person');
     if (poPerson) poPerson.value = '';
+
+    const poCenter = document.getElementById('po-center');
+    if (poCenter && currentUser?.center) poCenter.value = currentUser.center;
 
     const container = document.getElementById('po-products');
     if (container) {
@@ -778,6 +882,7 @@ function renderPoStatus(poList) {
   box.innerHTML = poList.map((po) => {
     const statusText = po.status === 'received' ? 'รับเข้าแล้ว' : 'รอรับสินค้า';
     const statusClass = po.status === 'received' ? 'is-ready' : '';
+    const poCenter = getPoCenter(po);
 
     const items = Array.isArray(po.items) ? po.items : [];
     const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
@@ -882,8 +987,8 @@ function renderPoStatus(poList) {
             <strong>${escapeHtml(po.po_person || '-')}</strong>
           </div>
           <div>
-            <span>สถานะ</span>
-            <strong>${statusText}</strong>
+            <span>ศูนย์รับเข้า</span>
+            <strong>${escapeHtml(poCenter || '-')}</strong>
           </div>
         </div>
 
@@ -907,7 +1012,7 @@ function renderPoStatus(poList) {
           </div>
         </div>
 
-        ${(currentUser?.role === 'admin' || currentUser?.role === 'stock_receiver') && po.status !== 'received' ? `
+        ${canReceivePo() && po.status !== 'received' ? `
           <div class="po-receive-actions">
             <button 
               class="btn-po-receive" 
@@ -1131,6 +1236,7 @@ function printPoDocument(poId) {
 
   const items = Array.isArray(po.items) ? po.items : [];
   const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
+  const poCenter = getPoCenter(po);
 
   const statusText = po.status === 'received'
     ? 'รับเข้าแล้ว'
@@ -1278,8 +1384,8 @@ function printPoDocument(poId) {
           <div><strong>สถานะ:</strong> ${escapeHtml(statusText)}</div>
           <div><strong>วันที่เปิด PO:</strong> ${escapeHtml(po.po_date || '-')}</div>
           <div><strong>ผู้เปิด PO:</strong> ${escapeHtml(po.po_person || '-')}</div>
+          <div><strong>ศูนย์รับเข้า:</strong> ${escapeHtml(poCenter || '-')}</div>
           <div><strong>วันที่พิมพ์:</strong> ${new Date().toLocaleString('th-TH')}</div>
-          <div><strong>ผู้พิมพ์:</strong> ${escapeHtml(currentUser?.name || currentUser?.code || '-')}</div>
         </div>
 
         <table>
@@ -1549,6 +1655,8 @@ async function receivePoFull(poId) {
   const items = getPoRemainingItems(po).map((item) => ({
     product: item.product,
     qty: item.remainingQty,
+    center: getPoCenter(po),
+    stock_center: getPoCenter(po),
   }));
 
   if (items.length === 0) {
@@ -1556,7 +1664,8 @@ async function receivePoFull(poId) {
     return;
   }
 
-  const ok = confirm('ยืนยันรับสินค้าเข้าทั้งใบใช่ไหม?');
+  const targetCenter = getPoCenter(po);
+  const ok = confirm(`ยืนยันรับสินค้าเข้าทั้งใบ${targetCenter ? ` เข้าสต็อก ${targetCenter}` : ''} ใช่ไหม?`);
   if (!ok) return;
 
   await receivePoItems(poId, items);
@@ -1697,12 +1806,15 @@ async function savePartialReceivePo(poId) {
 
 async function receivePoItems(poId, items, options = {}) {
   const shouldRefreshPoStatus = options.refreshPoStatus !== false;
+  const po = window.currentPoStatusList?.find((item) => item.po_id === poId) || {};
+  const targetCenter = options.center || getPoCenter(po) || currentUser?.center || '';
 
   const validItems = (items || [])
     .map((item) => ({
       product: item.product,
       qty: Number(item.qty || 0),
       remainingQty: Number(item.remainingQty || item.remaining_qty || 0),
+      center: item.center || item.stock_center || targetCenter,
     }))
     .filter((item) => item.product && item.qty > 0);
 
@@ -1723,16 +1835,28 @@ async function receivePoItems(poId, items, options = {}) {
   showToast('', 'loading', 'กำลังรับสินค้าเข้า...');
 
   try {
-    const { data, error } = await supabaseClient.rpc('receive_po_items', {
+    const receiveParams = {
       p_receive_request_id: newRequestId('receive-po'),
       p_po_id: poId,
       p_staff_code: currentUser?.code || '',
       p_staff_name: currentUser?.name || currentUser?.code || '',
+      p_center: targetCenter,
       p_items: validItems.map((item) => ({
         product: item.product,
         qty: item.qty,
+        center: item.center || targetCenter,
+        stock_center: item.center || targetCenter,
       })),
-    });
+    };
+
+    let { data, error } = await supabaseClient.rpc('receive_po_items', receiveParams);
+
+    if (error && isRpcSignatureError(error)) {
+      const { p_center, ...fallbackParams } = receiveParams;
+      const fallback = await supabaseClient.rpc('receive_po_items', fallbackParams);
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) throw error;
 

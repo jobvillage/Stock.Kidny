@@ -218,6 +218,13 @@
           <button class="btn-add-row out" type="button" data-add-row="out">+ เพิ่มรายการ</button>
         </div>
 
+        <div class="products-columns products-columns-out" aria-hidden="true">
+          <span>สินค้า</span>
+          <span>คงเหลือเดิม</span>
+          <span>จำนวน</span>
+          <span></span>
+        </div>
+
         <div id="out-products" class="product-list"></div>
 
         <button class="btn-submit btn-submit-out" id="btn-out" type="button" data-submit="out">
@@ -304,6 +311,9 @@
               <option value="">ทุกสต็อก</option>
               <option value="สต็อกใหญ่">สต็อกใหญ่</option>
               <option value="Hub Admin">Hub Admin</option>
+              <option value="ไตบน">ไตบน</option>
+              <option value="ไตล่าง">ไตล่าง</option>
+              <option value="ไตดี">ไตดี</option>
             </select>
           </div>
 
@@ -321,6 +331,9 @@
               <span>สต็อกคงเหลือ</span>
               <small>แสดงยอดตามศูนย์ที่เลือก</small>
             </div>
+            <button class="btn-add-row pending-refresh" type="button" id="btn-refresh-stock-view">
+              รีเฟรชรายการ
+            </button>
           </div>
 
           <div class="stock-table-scroll">
