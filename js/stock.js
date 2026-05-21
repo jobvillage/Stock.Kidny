@@ -1,5 +1,134 @@
 let pendingPoSummary = {};
 
+const STOCK_VIEW_RULES = {
+  'ไตบน': {
+    products: [],
+    levels: {},
+  },
+  'ไตล่าง': {
+    products: [],
+    levels: {},
+  },
+  'ไตดี': {
+    products: [],
+    levels: {},
+  },
+};
+
+let stockMinMaxFromSupabase = {};
+
+function setStockMinMaxFromSupabase(center, product, minQty, maxQty) {
+  if (!center || !product) return;
+
+  if (!stockMinMaxFromSupabase[center]) {
+    stockMinMaxFromSupabase[center] = {};
+  }
+
+  stockMinMaxFromSupabase[center][product] = {
+    min: minQty,
+    max: maxQty,
+  };
+}
+
+function getStockViewRule(center) {
+  return STOCK_VIEW_RULES[center] || { products: [], levels: {} };
+}
+
+function getStockMinMax(center, product) {
+  const rule = getStockViewRule(center);
+  const level = stockMinMaxFromSupabase?.[center]?.[product] || rule.levels?.[product] || {};
+  const min = Number(level.min);
+  const max = Number(level.max);
+
+  return {
+    min: Number.isFinite(min) && min > 0 ? min : '',
+    max: Number.isFinite(max) && max > 0 ? max : '',
+  };
+}
+
+function getTransferTrendQty(center, product) {
+  return (stockViewTransfers || []).reduce((total, transfer) => {
+    const items = normalizeItems(transfer.items);
+    const qty = items
+      .filter((item) => item.product === product)
+      .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+
+    if (!qty) return total;
+    if (transfer.toCenter === center) return total + qty;
+    if (transfer.fromCenter === center) return total - qty;
+    return total;
+  }, 0);
+}
+
+function getStockOrderMessage(center, product, currentQty) {
+  const { min, max } = getStockMinMax(center, product);
+  if (min === '' || max === '') return '';
+
+  const projectedQty = Number(currentQty || 0) + getTransferTrendQty(center, product);
+  return projectedQty < min ? 'สินค้าต้อง เปิด PO' : '';
+}
+
+function getAutoPoQty(center, product, currentQty) {
+  const { min, max } = getStockMinMax(center, product);
+  if (min === '' || max === '') return 0;
+
+  const projectedQty = Number(currentQty || 0) + getTransferTrendQty(center, product);
+  if (projectedQty >= min) return 0;
+
+  return Math.max(1, Math.ceil(max - projectedQty));
+}
+
+function getStockProductsForCenter(center, productList) {
+  const allowedProducts = getStockViewRule(center).products || [];
+  if (!allowedProducts.length) return productList;
+  return productList.filter((product) => allowedProducts.includes(product));
+}
+
+function getStockDashboardProducts(stockCenters, primaryCenter, selectedProduct) {
+  let productList = [
+    ...stockCenters.flatMap((center) => Object.keys(localStock[center] || {})),
+    ...Object.keys(pendingPoSummary || {})
+  ];
+
+  const configuredProducts = getStockViewRule(primaryCenter).products || [];
+  if (configuredProducts.length) {
+    productList.push(...configuredProducts);
+  }
+
+  productList = [...new Set(productList)]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'th'));
+
+  if (selectedProduct) {
+    productList = productList.filter((product) => product === selectedProduct);
+  }
+
+  if (currentUser?.role === 'center_staff' && primaryCenter) {
+    productList = getStockProductsForCenter(primaryCenter, productList);
+  }
+
+  return productList;
+}
+
+function getStockDashboardCenters(selectedCenter) {
+  if (currentUser?.role === 'center_staff' && currentUser.center) {
+    return [currentUser.center];
+  }
+
+  const stockCenters = getAllStockCenters();
+  return selectedCenter
+    ? stockCenters.filter((center) => center === selectedCenter)
+    : stockCenters;
+}
+
+function getStockTransferFilterCenter() {
+  if (currentUser?.role === 'center_staff' && currentUser.center) {
+    return currentUser.center;
+  }
+
+  return getStockCenterFilter();
+}
+
 // =====================
 // PRODUCT ROWS
 // =====================
@@ -226,20 +355,10 @@ function renderStockDashboard() {
     const selectedCenter = document.getElementById('stock-center-filter')?.value || '';
     const selectedProduct = getStockProductFilter();
 
-    const stockCenters = getAllStockCenters();
+    const stockCenters = getStockDashboardCenters(selectedCenter);
+    const primaryCenter = stockCenters[0] || currentUser?.center || selectedCenter || '';
 
-    let productList = [
-      ...stockCenters.flatMap((center) => Object.keys(localStock[center] || {})),
-      ...Object.keys(pendingPoSummary || {})
-    ];
-
-    productList = [...new Set(productList)]
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b, 'th'));
-
-    if (selectedProduct) {
-      productList = productList.filter((product) => product === selectedProduct);
-    }
+    const productList = getStockDashboardProducts(stockCenters, primaryCenter, selectedProduct);
 
     if (productList.length === 0) {
       box.innerHTML = '<div class="empty-state">ไม่พบรายการสินค้า</div>';
@@ -248,16 +367,46 @@ function renderStockDashboard() {
 
     let columns = [];
 
-    stockCenters.forEach((center) => {
-      if (selectedCenter && selectedCenter !== center) return;
-
-      columns.push({
-        key: `stock-${center}`,
-        label: center,
-        className: center === 'Hub Admin' ? 'stock-col-hub' : 'stock-col-main',
-        getValue: (product) => Number(localStock[center]?.[product] || 0)
+    if (stockCenters.length === 1 && primaryCenter) {
+      columns = [
+        {
+          key: `stock-${primaryCenter}`,
+          label: primaryCenter,
+          className: primaryCenter === 'Hub Admin' ? 'stock-col-hub' : 'stock-col-main',
+          getValue: (product) => Number(localStock[primaryCenter]?.[product] || 0)
+        },
+        {
+          key: 'min',
+          label: 'Min',
+          className: 'stock-col-minmax',
+          getValue: (product) => getStockMinMax(primaryCenter, product).min
+        },
+        {
+          key: 'max',
+          label: 'Max',
+          className: 'stock-col-minmax',
+          getValue: (product) => getStockMinMax(primaryCenter, product).max
+        },
+        {
+          key: 'order',
+          label: 'สั่งสินค้า',
+          className: 'stock-col-order',
+          getValue: (product) => {
+            const currentQty = Number(localStock[primaryCenter]?.[product] || 0);
+            return getStockOrderMessage(primaryCenter, product, currentQty);
+          }
+        },
+      ];
+    } else {
+      stockCenters.forEach((center) => {
+        columns.push({
+          key: `stock-${center}`,
+          label: center,
+          className: center === 'Hub Admin' ? 'stock-col-hub' : 'stock-col-main',
+          getValue: (product) => Number(localStock[center]?.[product] || 0)
+        });
       });
-    });
+    }
 
     // เปิด PO ให้อยู่ช่องสุดท้ายเสมอ
     columns.push({
@@ -315,11 +464,12 @@ function renderStockDashboard() {
 
 async function fetchStockViewTransfers() {
   const box = document.getElementById('stock-transfer-list');
-  if (!box) return;
 
-  const selectedCenter = getStockCenterFilter();
+  const selectedCenter = getStockTransferFilterCenter();
 
-  box.innerHTML = '<div class="empty-state">กำลังโหลดรายการ Transfer...</div>';
+  if (box) {
+    box.innerHTML = '<div class="empty-state">กำลังโหลดรายการ Transfer...</div>';
+  }
 
   try {
     const { data, error } = await supabaseClient.rpc('get_pending_transfers', {
@@ -342,11 +492,14 @@ async function fetchStockViewTransfers() {
     }));
 
     renderStockViewTransfers();
+    renderStockDashboard();
 
   } catch (error) {
     console.error('Stock view transfer error:', error);
     stockViewTransfers = [];
-    box.innerHTML = `<div class="empty-state error-state">${escapeHtml(error.message || 'โหลดรายการ Transfer ไม่สำเร็จ')}</div>`;
+    if (box) {
+      box.innerHTML = `<div class="empty-state error-state">${escapeHtml(error.message || 'โหลดรายการ Transfer ไม่สำเร็จ')}</div>`;
+    }
   }
 }
 
@@ -375,6 +528,207 @@ async function refreshStockViewOnly() {
   } finally {
     if (button) button.disabled = false;
   }
+}
+
+function getAutoPoItemsFromStockView() {
+  const selectedCenter = document.getElementById('stock-center-filter')?.value || '';
+  const selectedProduct = getStockProductFilter();
+  const stockCenters = getStockDashboardCenters(selectedCenter);
+  const primaryCenter = stockCenters[0] || currentUser?.center || selectedCenter || '';
+
+  if (!primaryCenter || stockCenters.length !== 1) {
+    return {
+      center: '',
+      items: [],
+      message: 'กรุณาเลือกศูนย์เดียวก่อนเปิด PO อัตโนมัติ',
+    };
+  }
+
+  const productList = getStockDashboardProducts(stockCenters, primaryCenter, selectedProduct);
+  const items = productList.map((product) => {
+    const currentQty = Number(localStock[primaryCenter]?.[product] || 0);
+    const qty = getAutoPoQty(primaryCenter, product, currentQty);
+    return { product, qty };
+  }).filter((item) => item.product && item.qty > 0);
+
+  return {
+    center: primaryCenter,
+    items,
+    message: items.length ? '' : 'ยังไม่มีสินค้าที่ต้องเปิด PO',
+  };
+}
+
+function setPoSelectValue(select, value) {
+  if (!select) return;
+
+  if (select.tomselect) {
+    select.tomselect.setValue(value, true);
+    return;
+  }
+
+  select.value = value;
+}
+
+function fillPoFormFromStockItems(center, items) {
+  if (typeof renderPoCmoForm === 'function') {
+    renderPoCmoForm();
+  }
+
+  const poCenter = document.getElementById('po-center');
+  if (poCenter) {
+    poCenter.value = center;
+  }
+
+  const poPerson = document.getElementById('po-person');
+  if (poPerson && !poPerson.value.trim()) {
+    poPerson.value = currentUser?.name || currentUser?.code || '';
+  }
+
+  const poNote = document.getElementById('po-note');
+  if (poNote && !poNote.value.trim()) {
+    poNote.value = 'เปิด PO อัตโนมัติจากหน้า Stock';
+  }
+
+  const container = document.getElementById('po-products');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  items.forEach((item) => {
+    addPoRow();
+    const row = container.querySelector('.product-row:last-child');
+    setPoSelectValue(row?.querySelector('select'), item.product);
+
+    const qtyInput = row?.querySelector('input[type="number"]');
+    if (qtyInput) {
+      qtyInput.value = item.qty;
+    }
+  });
+}
+
+function openAutoPoFromStock() {
+  if (typeof canAccessTab === 'function' && !canAccessTab('transfer')) {
+    showToast('⚠️ ผู้ใช้นี้ไม่มีสิทธิ์เปิด PO', 'error');
+    return;
+  }
+
+  const { center, items, message } = getAutoPoItemsFromStockView();
+
+  if (!items.length) {
+    showToast(`⚠️ ${message}`, 'error');
+    return;
+  }
+
+  if (typeof showTab === 'function') {
+    showTab('transfer');
+  } else {
+    switchTab('transfer');
+  }
+
+  const transferPanel = document.getElementById('panel-transfer');
+  if (transferPanel) {
+    transferPanel.hidden = false;
+    transferPanel.classList.add('is-active');
+  }
+
+  fillPoFormFromStockItems(center, items);
+  showToast(`✅ เตรียมรายการเปิด PO อัตโนมัติ ${items.length} รายการแล้ว`, 'success');
+}
+
+function printStockView() {
+  const stockSection = document.querySelector('#panel-stock .stock-view-section');
+  if (!stockSection) return;
+
+  const printWindow = window.open('', '_blank', 'width=1100,height=780');
+  if (!printWindow) {
+    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อปริ้นท์สต็อก', 'error');
+    return;
+  }
+
+  const printedAt = new Date().toLocaleString('th-TH');
+  const center = currentUser?.role === 'center_staff'
+    ? currentUser.center
+    : (document.getElementById('stock-center-filter')?.value || 'ทุกสต็อก');
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+      <meta charset="UTF-8">
+      <title>สต็อกคงเหลือ</title>
+      <style>
+        body {
+          margin: 24px;
+          color: #111827;
+          font-family: Arial, sans-serif;
+        }
+        h1 {
+          margin: 0 0 6px;
+          font-size: 22px;
+        }
+        .print-meta {
+          margin-bottom: 16px;
+          color: #64748b;
+          font-size: 13px;
+        }
+        .products-header,
+        .stock-header-actions {
+          display: none !important;
+        }
+        .stock-split-table {
+          width: 100%;
+          display: grid;
+          grid-template-columns: 190px 1fr;
+          border: 1px solid #d1d5db;
+          border-radius: 0;
+          overflow: hidden;
+        }
+        .stock-scroll-inner {
+          min-width: 0 !important;
+          width: 100%;
+        }
+        .stock-scroll-row {
+          display: grid;
+          grid-template-columns: repeat(var(--stock-col-count, 5), minmax(95px, 1fr)) !important;
+        }
+        .stock-fixed-head,
+        .stock-fixed-cell,
+        .stock-scroll-row > div {
+          min-height: 48px;
+          box-sizing: border-box;
+          padding: 8px 10px;
+          display: flex;
+          align-items: center;
+          border-bottom: 1px solid #d1d5db;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .stock-fixed-head,
+        .stock-scroll-head > div {
+          background: #f1f5f9;
+        }
+        .stock-scroll-row > div {
+          justify-content: center;
+          text-align: center;
+          border-left: 1px solid #e5e7eb;
+        }
+        .stock-col-order {
+          white-space: normal !important;
+          color: #b45309;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>สต็อกคงเหลือ</h1>
+      <div class="print-meta">ศูนย์: ${escapeHtml(center)} | พิมพ์เมื่อ: ${escapeHtml(printedAt)}</div>
+      ${stockSection.innerHTML}
+    </body>
+    </html>
+  `);
+
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
 }
 
 function renderStockViewTransfers() {

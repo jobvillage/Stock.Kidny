@@ -146,6 +146,10 @@ function showTab(tab) {
   }
 
   if (tab === 'stock') {
+    if (typeof fetchStockViewTransfers === 'function') {
+      fetchStockViewTransfers();
+    }
+
     if (typeof renderStockDashboard === 'function') {
       renderStockDashboard();
     }
@@ -205,6 +209,8 @@ function bindStaticEvents() {
   document.getElementById('btn-refresh-po-status')?.addEventListener('click', fetchPoStatus);
   document.getElementById('btn-refresh-request-status')?.addEventListener('click', fetchRequestStatus);
   document.getElementById('btn-refresh-stock-view')?.addEventListener('click', refreshStockViewOnly);
+  document.getElementById('btn-auto-po-stock-view')?.addEventListener('click', openAutoPoFromStock);
+  document.getElementById('btn-print-stock-view')?.addEventListener('click', printStockView);
 }
 
 document.addEventListener('keydown', (event) => {

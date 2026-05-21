@@ -83,6 +83,7 @@ async function submitTransfer() {
 }
 
 const PO_CENTER_CACHE_KEY = 'po_center_cache_v1';
+const PO_EMAIL_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby6HftKeGFb0nrEYydWwH4Ps98patvyHfmGX0q1v5acpKSeqiuW9e5p_RIg0Qucz0K5rw/exec';
 
 function getPoCenterCache() {
   try {
@@ -98,6 +99,74 @@ function savePoCenterToCache(poId, center) {
   const cache = getPoCenterCache();
   cache[poId] = center;
   localStorage.setItem(PO_CENTER_CACHE_KEY, JSON.stringify(cache));
+}
+
+function buildPoEmailPayload(po) {
+  return {
+    po_id: po.po_id || po.po_no || po.po_number || '',
+    po_date: po.po_date || '',
+    po_person: po.po_person || '',
+    center: getPoCenter(po),
+    note: po.note || '',
+    status: po.status || '',
+    items: Array.isArray(po.items) ? po.items : [],
+    sent_by_code: currentUser?.code || '',
+    sent_by_name: currentUser?.name || currentUser?.code || '',
+  };
+}
+
+async function sendPoEmail(poId, button) {
+  const po = window.currentPoStatusList?.find((item) => item.po_id === poId);
+
+  if (!po) {
+    showToast('❌ ไม่พบข้อมูล PO นี้', 'error');
+    return;
+  }
+
+  if (!PO_EMAIL_WEB_APP_URL) {
+    showToast('⚠️ ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งอีเมล PO', 'error');
+    return;
+  }
+
+  const targetButton = button || document.querySelector(`[data-email-po-id="${CSS.escape(poId)}"]`);
+  if (targetButton?.disabled) return;
+
+  if (targetButton) {
+    targetButton.disabled = true;
+    targetButton.classList.add('is-sending');
+    targetButton.innerHTML = '<span>📧</span><span>กำลังส่ง...</span>';
+  }
+
+  showToast('', 'loading', 'กำลังส่งอีเมล PO...');
+
+  try {
+    await fetch(PO_EMAIL_WEB_APP_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(buildPoEmailPayload(po)),
+    });
+
+    if (targetButton) {
+      targetButton.innerHTML = '<span>📧</span><span>ส่งอีกครั้ง</span>';
+      targetButton.classList.add('is-sent');
+    }
+
+    showToast('✅ ส่งคำขออีเมล PO แล้ว', 'success');
+  } catch (error) {
+    console.error('send_po_email error:', error);
+    if (targetButton) {
+      targetButton.innerHTML = '<span>📧</span><span>ส่งอีเมล PO</span>';
+    }
+    showToast(`❌ ${error.message || 'ส่งอีเมล PO ไม่สำเร็จ'}`, 'error');
+  } finally {
+    if (targetButton) {
+      targetButton.disabled = false;
+      targetButton.classList.remove('is-sending');
+    }
+  }
 }
 
 function resetTransferForm() {
@@ -1031,6 +1100,18 @@ function renderPoStatus(poList) {
             </button>
           </div>
         ` : ''}
+
+        <div class="po-email-actions">
+          <button
+            class="btn-po-email"
+            type="button"
+            data-email-po-id="${escapeHtml(po.po_id || '')}"
+            onclick="sendPoEmail('${escapeHtml(po.po_id || '')}', this)"
+          >
+            <span>📧</span>
+            <span>ส่งอีเมล PO</span>
+          </button>
+        </div>
       </article>
     `;
   }).join('');

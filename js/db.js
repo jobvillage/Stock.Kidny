@@ -52,6 +52,7 @@ async function fetchStock() {
 
     // reset localStock ก่อนเติมข้อมูลใหม่จาก Supabase
     localStock = {};
+    stockMinMaxFromSupabase = {};
 
     (data || []).forEach((item) => {
       const center = typeof normalizeCenterName === 'function'
@@ -64,6 +65,15 @@ async function fetchStock() {
       }
 
       localStock[center][product] = Number(item.qty) || 0;
+
+      if (typeof setStockMinMaxFromSupabase === 'function') {
+        setStockMinMaxFromSupabase(
+          center,
+          product,
+          item.min_qty,
+          item.max_qty
+        );
+      }
     });
 
     refreshInBadges();
