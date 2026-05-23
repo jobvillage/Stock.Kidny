@@ -720,6 +720,19 @@ function canReceivePo() {
   return ['admin', 'adminR', 'stock_receiver'].includes(currentUser?.role);
 }
 
+function canEditPo(po = {}) {
+  if (!po || ['received', 'partial_received'].includes(po.status)) {
+    return false;
+  }
+
+  if (['admin', 'adminR'].includes(currentUser?.role)) {
+    return true;
+  }
+
+  const poCenter = getPoCenter(po);
+  return Boolean(currentUser?.center && poCenter && poCenter === currentUser.center);
+}
+
 function addPoRow() {
   const container = document.getElementById('po-products');
   if (!container) return;
@@ -1026,7 +1039,7 @@ function renderPoStatus(poList) {
                 🖨️ พิมพ์ PO
               </button>
 
-              ${!['received', 'partial_received'].includes(po.status) ? `
+              ${canEditPo(po) ? `
                 <button 
                   class="btn-po-edit" 
                   type="button"
@@ -1123,6 +1136,11 @@ function enablePoEdit(poId) {
 
   if (!po || !card) {
     showToast('❌ ไม่พบข้อมูล PO นี้', 'error');
+    return;
+  }
+
+  if (!canEditPo(po)) {
+    showToast('⚠️ แก้ไขได้เฉพาะ PO ของศูนย์ตัวเอง', 'error');
     return;
   }
 
@@ -1258,6 +1276,12 @@ function addPoEditRow(poId) {
 async function savePoEdit(poId) {
   const card = document.querySelector(`[data-po-id="${poId}"]`);
   if (!card) return;
+
+  const po = window.currentPoStatusList?.find((item) => item.po_id === poId);
+  if (!canEditPo(po)) {
+    showToast('⚠️ แก้ไขได้เฉพาะ PO ของศูนย์ตัวเอง', 'error');
+    return;
+  }
 
   const rows = card.querySelectorAll('.po-edit-row');
 
