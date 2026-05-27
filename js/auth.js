@@ -163,9 +163,31 @@ function showLoginScreen() {
 }
 
 function applyRolePageLabels() {
+  const inTabIcon = document.querySelector('#tab-in .segment-icon');
+  const inTabText = document.querySelector('#tab-in span:last-child');
   const transferTabText = document.querySelector('#tab-transfer span:last-child');
   const transferTitle = document.querySelector('#panel-transfer h2');
   const transferDesc = document.querySelector('#panel-transfer .panel-title p');
+
+  if (['admin', 'adminR'].includes(currentUser?.role)) {
+    if (inTabIcon) inTabIcon.textContent = '🔁';
+    if (inTabText) inTabText.textContent = 'Transfer';
+
+    if (typeof modeLabels !== 'undefined') {
+      modeLabels.in = 'Transfer';
+    }
+
+    if (typeof renderAdminTransferForm === 'function') {
+      renderAdminTransferForm();
+    }
+  } else {
+    if (inTabIcon) inTabIcon.textContent = '📥';
+    if (inTabText) inTabText.textContent = 'รับเข้า';
+
+    if (typeof modeLabels !== 'undefined') {
+      modeLabels.in = 'รับสินค้าเข้า';
+    }
+  }
 
   if (['center_staff', 'admin', 'adminR'].includes(currentUser?.role)) {
     if (transferTabText) transferTabText.textContent = 'เปิด PO';
@@ -290,7 +312,9 @@ function applyPermissionUI() {
   } else {
     unlockSelect('out-center');
     unlockSelect('transfer-from-center');
+    unlockSelect('transfer-to-center');
     unlockSelect('stock-center-filter');
+    filterTransferTargetCenters();
   }
 }
 

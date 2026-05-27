@@ -673,6 +673,93 @@ function renderPoCmoForm() {
   addPoRow();
 }
 
+function renderAdminTransferForm() {
+  const panel = document.getElementById('panel-in');
+  if (!panel) return;
+
+  const centerOptions = getPickStockLocations().map((center) => `
+    <option value="${escapeHtml(center)}">${escapeHtml(center)}</option>
+  `).join('');
+
+  panel.innerHTML = `
+    <div class="panel-title">
+      <span class="title-icon transfer">🔁</span>
+      <div>
+        <h2>Transfer Stock</h2>
+        <p>ย้ายสต็อกระหว่างศูนย์ กรณีรับสินค้าเข้าไว้ผิดสต็อก</p>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="field-group">
+        <label for="transfer-date">วันที่ย้ายสต็อก</label>
+        <input type="date" id="transfer-date" />
+      </div>
+
+      <div class="field-group">
+        <label for="transfer-person">ผู้ทำรายการ</label>
+        <input type="text" id="transfer-person" placeholder="ชื่อผู้ทำรายการ" readonly />
+      </div>
+
+      <div class="field-group">
+        <label for="transfer-from-center">จากสต็อก</label>
+        <select id="transfer-from-center">
+          <option value="">— เลือกสต็อกต้นทาง —</option>
+          ${centerOptions}
+        </select>
+      </div>
+
+      <div class="field-group">
+        <label for="transfer-to-center">ไปสต็อก</label>
+        <select id="transfer-to-center">
+          <option value="">— เลือกสต็อกปลายทาง —</option>
+          ${centerOptions}
+        </select>
+      </div>
+
+      <div class="field-group field-group-full">
+        <label for="transfer-note">หมายเหตุ</label>
+        <input type="text" id="transfer-note" placeholder="เช่น แก้ไขการรับเข้าผิดสต็อก / เลข PO ที่เกี่ยวข้อง" />
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="products-header">
+      <div>
+        <span>รายการสินค้าที่ต้องย้าย</span>
+        <small>เลือกสินค้าจากสต็อกต้นทาง และระบุจำนวนที่ต้องการย้าย</small>
+      </div>
+      <button class="btn-add-row transfer" type="button" id="btn-add-transfer-row">
+        + เพิ่มรายการ
+      </button>
+    </div>
+
+    <div class="products-columns products-columns-transfer" aria-hidden="true">
+      <span>สินค้า</span>
+      <span>จำนวน</span>
+      <span></span>
+    </div>
+
+    <div id="transfer-products" class="product-list"></div>
+
+    <button class="btn-submit btn-submit-transfer" id="btn-transfer" type="button" data-submit="transfer">
+      <span>🔁</span>
+      <span>บันทึก Transfer Stock</span>
+    </button>
+  `;
+
+  setToday('transfer-date');
+  document.getElementById('transfer-person').value = `${currentUser.name} (${currentUser.code})`;
+  document.getElementById('btn-add-transfer-row')?.addEventListener('click', () => addProductRow('transfer'));
+  document.getElementById('btn-transfer')?.addEventListener('click', submitTransfer);
+  document.getElementById('transfer-from-center')?.addEventListener('change', refreshTransferInfo);
+  document.getElementById('transfer-to-center')?.addEventListener('change', filterTransferTargetCenters);
+
+  addProductRow('transfer');
+  filterTransferTargetCenters();
+}
+
 function getPoCenter(po = {}) {
   const poId = po.po_id || po.poId || po.po_no || po.poNo || po.request_id || po.id || '';
   const centerFromCache = getPoCenterCache()[poId] || '';

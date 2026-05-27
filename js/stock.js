@@ -17,6 +17,40 @@ const STOCK_VIEW_RULES = {
 
 let stockMinMaxFromSupabase = {};
 
+function setStockUnit(center, product, unit) {
+  const normalizedUnit = String(unit || '').trim();
+  if (!center || !product || !normalizedUnit) return;
+
+  if (!localStockUnits[center]) {
+    localStockUnits[center] = {};
+  }
+
+  localStockUnits[center][product] = normalizedUnit;
+}
+
+function getStockUnit(center, product) {
+  const unit = String(localStockUnits?.[center]?.[product] || '').trim();
+  if (unit || !product) return unit;
+
+  const matchedCenter = Object.keys(localStockUnits || {})
+    .find((stockCenter) => localStockUnits?.[stockCenter]?.[product]);
+
+  return matchedCenter ? String(localStockUnits[matchedCenter][product] || '').trim() : '';
+}
+
+function getStockQtyWithUnit(center, product, qty) {
+  const unit = getStockUnit(center, product);
+  return unit ? `${qty} ${unit}` : String(qty);
+}
+
+function setInlineStockUnit(badge, unit) {
+  const labelEl = badge?.querySelector('.qty-label');
+  if (!labelEl) return;
+
+  labelEl.textContent = unit || '';
+  labelEl.hidden = !unit;
+}
+
 function setStockMinMaxFromSupabase(center, product, minQty, maxQty) {
   if (!center || !product) return;
 
@@ -173,14 +207,18 @@ function updateInlineStock(select) {
   if (!product) {
     valEl.textContent = '—';
     valEl.className = 'qty-val';
+    setInlineStockUnit(badge, '');
     return;
   }
 
+  const center = document.getElementById('in-center')?.value;
   const stock = getStockForCenter('in');
   const qty = stock[product] || 0;
+  const unit = getStockUnit(center, product);
 
   valEl.textContent = qty;
   valEl.className = `qty-val${qty <= 0 ? ' empty' : qty <= 5 ? ' low' : ''}`;
+  setInlineStockUnit(badge, unit);
 }
 
 function updateTransferStockInfo(select) {
@@ -198,9 +236,10 @@ function updateTransferStockInfo(select) {
   const stock = getTransferSourceStock();
   const qty = stock[product] || 0;
   const cls = qty <= 0 ? 'empty' : qty <= 5 ? 'low' : 'ok';
+  const qtyText = getStockQtyWithUnit(fromCenter, product, qty);
 
   next.style.display = 'flex';
-  next.innerHTML = `ต้นทาง: <strong>${escapeHtml(fromCenter)}</strong> <span aria-hidden="true">|</span> ${escapeHtml(product)} คงเหลือ: <span class="val ${cls}">${qty} ชิ้น</span>`;
+  next.innerHTML = `ต้นทาง: <strong>${escapeHtml(fromCenter)}</strong> <span aria-hidden="true">|</span> ${escapeHtml(product)} คงเหลือ: <span class="val ${cls}">${escapeHtml(qtyText)}</span>`;
 }
 
 function refreshInBadges() {

@@ -1,4 +1,5 @@
 let localStock = {};
+let localStockUnits = {};
 let pendingTransfers = [];
 let stockViewTransfers = [];
 
@@ -8,6 +9,7 @@ function saveStockCache() {
   try {
     localStorage.setItem(DB_STOCK_CACHE_KEY, JSON.stringify({
       stock: localStock,
+      units: localStockUnits,
       savedAt: new Date().toISOString(),
     }));
   } catch (error) {
@@ -24,6 +26,7 @@ function loadStockCache() {
     if (!data.stock) return false;
 
     localStock = data.stock;
+    localStockUnits = data.units || {};
 
     refreshInBadges();
     refreshOutInfo();
@@ -35,6 +38,27 @@ function loadStockCache() {
     console.warn('Load stock cache failed:', error);
     return false;
   }
+}
+
+async function fetchStockUnitsFromTable() {
+  const { data, error } = await supabaseClient
+    .from('stock_items')
+    .select('center, product, unit');
+
+  if (error) {
+    console.warn('Load stock units failed:', error);
+    return;
+  }
+
+  (data || []).forEach((item) => {
+    const center = typeof normalizeCenterName === 'function'
+      ? normalizeCenterName(item.center)
+      : item.center;
+
+    if (typeof setStockUnit === 'function') {
+      setStockUnit(center, item.product, item.unit);
+    }
+  });
 }
 
 // =====================
@@ -52,6 +76,7 @@ async function fetchStock() {
 
     // reset localStock ก่อนเติมข้อมูลใหม่จาก Supabase
     localStock = {};
+    localStockUnits = {};
     stockMinMaxFromSupabase = {};
 
     (data || []).forEach((item) => {
@@ -66,6 +91,10 @@ async function fetchStock() {
 
       localStock[center][product] = Number(item.qty) || 0;
 
+      if (typeof setStockUnit === 'function') {
+        setStockUnit(center, product, item.Unit || item.unit || item.unit_name || item.product_unit || item.uom);
+      }
+
       if (typeof setStockMinMaxFromSupabase === 'function') {
         setStockMinMaxFromSupabase(
           center,
@@ -76,12 +105,15 @@ async function fetchStock() {
       }
     });
 
+    await fetchStockUnitsFromTable();
+
     refreshInBadges();
     refreshOutInfo();
     refreshTransferInfo();
     renderStockDashboard();
     fetchPendingPoSummary();
     renderHubStockDashboard();
+    saveStockCache();
 
     setSyncStatus('โหลดสต็อกแล้ว', 'ready');
 

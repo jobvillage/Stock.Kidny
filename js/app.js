@@ -118,6 +118,11 @@ function showTab(tab) {
     panel.hidden = !isTarget;
   });
 
+  const label = document.getElementById('active-mode-label');
+  if (label && typeof modeLabels !== 'undefined') {
+    label.textContent = modeLabels[tab] || '';
+  }
+
   if (tab === 'request_status') {
     if (typeof markStaffRequestStatusSeen === 'function') {
       markStaffRequestStatusSeen();

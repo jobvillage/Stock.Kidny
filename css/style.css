@@ -413,6 +413,10 @@ button {
   grid-template-columns: 1fr 116px 96px 40px;
 }
 
+.products-columns-transfer {
+  grid-template-columns: 1fr 96px 40px;
+}
+
 .products-columns span {
   color: var(--text-dim);
   font-size: 11px;

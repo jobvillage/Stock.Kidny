@@ -163,7 +163,7 @@ function addProductRow(type) {
       </select>
       <div class="inline-stock" aria-label="คงเหลือเดิม">
         <span class="qty-val">—</span>
-        <span class="qty-label">ชิ้น</span>
+        <span class="qty-label" hidden></span>
       </div>
       <input type="number" min="1" inputmode="numeric" placeholder="จำนวน" aria-label="จำนวนรับเข้า" />
       <button class="btn-remove-row" type="button" title="ลบรายการ" aria-label="ลบรายการ">×</button>
@@ -193,7 +193,7 @@ function addProductRow(type) {
       </select>
       <div class="inline-stock" aria-label="คงเหลือเดิม">
         <span class="qty-val">—</span>
-        <span class="qty-label">ชิ้น</span>
+        <span class="qty-label" hidden></span>
       </div>
       <input type="number" min="1" step="1" inputmode="numeric" pattern="[0-9]*" placeholder="จำนวน" aria-label="จำนวน" />
       <button class="btn-remove-row" type="button" title="ลบรายการ" aria-label="ลบรายการ">×</button>
@@ -289,6 +289,9 @@ function updateStockInfo(select) {
         valEl.textContent = '—';
         valEl.className = 'qty-val';
       }
+      if (typeof setInlineStockUnit === 'function') {
+        setInlineStockUnit(inlineBadge, '');
+      }
     }
 
     if (next?.classList.contains('stock-info')) {
@@ -301,6 +304,8 @@ function updateStockInfo(select) {
   const stock = getStockForCenter('out');
   const qty = stock[product] || 0;
   const cls = qty <= 0 ? 'empty' : qty <= 5 ? 'low' : 'ok';
+  const center = document.getElementById('out-center')?.value;
+  const unit = typeof getStockUnit === 'function' ? getStockUnit(center, product) : '';
 
   if (inlineBadge) {
     const valEl = inlineBadge.querySelector('.qty-val');
@@ -308,13 +313,20 @@ function updateStockInfo(select) {
       valEl.textContent = qty;
       valEl.className = `qty-val ${cls}`;
     }
+    if (typeof setInlineStockUnit === 'function') {
+      setInlineStockUnit(inlineBadge, unit);
+    }
     return;
   }
 
   if (!next || !next.classList.contains('stock-info')) return;
 
+  const qtyText = typeof getStockQtyWithUnit === 'function'
+    ? getStockQtyWithUnit(center, product, qty)
+    : String(qty);
+
   next.style.display = 'flex';
-  next.innerHTML = `สินค้า: <strong>${escapeHtml(product)}</strong> <span aria-hidden="true">|</span> คงเหลือ: <span class="val ${cls}">${qty} ชิ้น</span>`;
+  next.innerHTML = `สินค้า: <strong>${escapeHtml(product)}</strong> <span aria-hidden="true">|</span> คงเหลือ: <span class="val ${cls}">${escapeHtml(qtyText)}</span>`;
 }
 
 function clearRequestStatusBadge() {
