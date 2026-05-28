@@ -232,6 +232,9 @@ function addProductRow(type) {
 
   container.appendChild(row);
   enhanceProductSelect(productSelect);
+  if (type === 'transfer' && typeof updateTransferConversionMode === 'function') {
+    updateTransferConversionMode();
+  }
 
   const info = document.createElement('div');
   info.className = 'stock-info';

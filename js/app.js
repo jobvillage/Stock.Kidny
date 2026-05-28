@@ -212,6 +212,9 @@ function bindStaticEvents() {
   document.getElementById('transfer-to-center')?.addEventListener('change', filterTransferTargetCenters);
   document.getElementById('hub-product-filter')?.addEventListener('change', renderHubStockDashboard);
   document.getElementById('btn-refresh-po-status')?.addEventListener('click', fetchPoStatus);
+  document.querySelectorAll('.po-status-filter').forEach((button) => {
+    button.addEventListener('click', () => setPoStatusFilter(button.dataset.poStatusFilter));
+  });
   document.getElementById('btn-refresh-request-status')?.addEventListener('click', fetchRequestStatus);
   document.getElementById('btn-fetch-staff-request-history')?.addEventListener('click', fetchStaffRequestHistory);
   document.getElementById('staff-request-history-status')?.addEventListener('change', fetchStaffRequestHistory);

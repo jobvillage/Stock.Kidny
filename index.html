@@ -10,7 +10,7 @@
   <link rel="icon" href="data:,">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260528-staff-history1">
+  <link rel="stylesheet" href="css/style.css?v=20260528-po-status-filter1">
 </head>
 <body>
   <section class="login-screen" id="login-screen">
@@ -314,6 +314,12 @@
         </div>
 
         <div class="pending-toolbar">
+          <button class="btn-add-row pending-refresh po-status-filter" type="button" data-po-status-filter="received">
+            รับเข้าแล้ว
+          </button>
+          <button class="btn-add-row pending-refresh po-status-filter is-active" type="button" data-po-status-filter="pending">
+            รอรับสินค้า
+          </button>
           <button class="btn-add-row pending-refresh" type="button" id="btn-refresh-po-status">
             รีเฟรชรายการ
           </button>
@@ -454,8 +460,8 @@
 <script src="js/auth.js?v=20260528-transfer-convert1" defer></script>
 <script src="js/db.js?v=20260528-request-unit1" defer></script>
 <script src="js/stock.js?v=20260527-unit1" defer></script>
-<script src="js/transfer.js?v=20260528-po-stay-after-create1" defer></script>
-<script src="js/ui.js?v=20260527-unit1" defer></script>
-<script src="js/app.js?v=20260528-staff-history1" defer></script>
+<script src="js/transfer.js?v=20260528-po-status-filter1" defer></script>
+<script src="js/ui.js?v=20260528-convert-lock1" defer></script>
+<script src="js/app.js?v=20260528-po-status-filter1" defer></script>
 </body>
 </html>

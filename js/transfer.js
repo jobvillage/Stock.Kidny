@@ -235,7 +235,11 @@ function resetTransferForm() {
     if (!select) return;
     if (select.tomselect) select.tomselect.clear(true);
     select.value = '';
+    if (select.tomselect) {
+      select.tomselect.control_input.setAttribute('placeholder', '— เลือกรายการสินค้า —');
+    }
   });
+  updateTransferConversionMode();
   setToday('transfer-date');
 
   if (currentUser.role === 'center_staff') {
@@ -244,6 +248,37 @@ function resetTransferForm() {
 
   filterTransferTargetCenters();
   refreshTransferInfo();
+}
+
+function updateTransferConversionMode() {
+  const isConverting = Boolean(
+    document.getElementById('transfer-convert-from')?.value
+    || document.getElementById('transfer-convert-to')?.value
+  );
+
+  document.querySelectorAll('#transfer-products .product-row.row-transfer').forEach((row) => {
+    const select = row.querySelector('.product-select');
+    if (!select) return;
+
+    if (isConverting) {
+      if (select.tomselect) {
+        select.tomselect.clear(true);
+        select.tomselect.disable();
+      } else {
+        select.value = '';
+        select.disabled = true;
+      }
+      select.classList.add('is-locked');
+      return;
+    }
+
+    if (select.tomselect) {
+      select.tomselect.enable();
+    } else {
+      select.disabled = false;
+    }
+    select.classList.remove('is-locked');
+  });
 }
 
 // =====================
@@ -287,6 +322,19 @@ function renderPendingTransfers(errorMessage = '') {
   }
 
   box.innerHTML = pendingTransfers.map((request) => {
+    const isTaideeRequest = request.center === 'ไตดี';
+    const transferToTaideeButton = isTaideeRequest
+      ? `
+        <button
+          class="btn-request-secondary request-transfer-inline"
+          type="button"
+          onclick="toggleRequestTransferBox('${escapeHtml(request.requestId || '')}')"
+        >
+          Transfer
+        </button>
+      `
+      : '';
+
     const itemRows = (request.items || []).map((item, index) => {
       const product = item.product || '';
       const qty = Number(item.qty) || 0;
@@ -358,7 +406,10 @@ function renderPendingTransfers(errorMessage = '') {
             <span class="overview-label">เลขใบเบิก</span>
             <strong>${escapeHtml(request.requestId || '-')}</strong>
           </div>
-          <span class="request-status-pill">รอดำเนินการ</span>
+          <div class="request-head-actions">
+            <span class="request-status-pill">รอดำเนินการ</span>
+            ${transferToTaideeButton}
+          </div>
         </div>
 
         <div class="stock-request-meta">
@@ -380,6 +431,43 @@ function renderPendingTransfers(errorMessage = '') {
           <div class="stock-request-note">
             <span>หมายเหตุ</span>
             <p>${escapeHtml(request.note)}</p>
+          </div>
+        ` : ''}
+
+        ${isTaideeRequest ? `
+          <div class="request-transfer-box" data-transfer-box="${escapeHtml(request.requestId || '')}" hidden>
+            <div class="form-grid request-transfer-grid">
+              <div class="field-group">
+                <label for="request-transfer-from-${escapeHtml(request.requestId || '')}">จากสต็อก</label>
+                <select id="request-transfer-from-${escapeHtml(request.requestId || '')}" class="request-transfer-from">
+                  ${renderPickLocationOptions('สต็อกใหญ่')}
+                </select>
+              </div>
+
+              <div class="field-group">
+                <label for="request-transfer-to-${escapeHtml(request.requestId || '')}">ไปสต็อก</label>
+                <select id="request-transfer-to-${escapeHtml(request.requestId || '')}" class="request-transfer-to">
+                  ${renderPickLocationOptions('ไตดี')}
+                </select>
+              </div>
+            </div>
+
+            <div class="request-transfer-actions">
+              <button
+                class="btn-request-secondary"
+                type="button"
+                onclick="toggleRequestTransferBox('${escapeHtml(request.requestId || '')}')"
+              >
+                ยกเลิก
+              </button>
+              <button
+                class="btn-request-primary"
+                type="button"
+                onclick="transferRequestItemsToCenter('${escapeHtml(request.requestId || '')}')"
+              >
+                ยืนยัน Transfer
+              </button>
+            </div>
           </div>
         ` : ''}
 
@@ -643,6 +731,125 @@ function normalizeItems(rawItems) {
   }
 
   return [];
+}
+
+function toggleRequestTransferBox(requestId) {
+  const box = document.querySelector(`[data-transfer-box="${CSS.escape(requestId)}"]`);
+  if (!box) return;
+
+  box.hidden = !box.hidden;
+}
+
+async function transferRequestItemsToCenter(requestId) {
+  if (!requestId) return;
+  if (!['admin', 'adminR', 'stock_receiver'].includes(currentUser?.role)) return;
+
+  const request = pendingTransfers.find((item) => item.requestId === requestId);
+  if (!request) {
+    showToast('❌ ไม่พบใบขอเบิกนี้', 'error');
+    return;
+  }
+
+  const card = document.querySelector(`[data-request-id="${CSS.escape(requestId)}"]`);
+  if (!card) {
+    showToast('❌ ไม่พบการ์ดใบขอเบิกนี้บนหน้าจอ', 'error');
+    return;
+  }
+
+  const box = card.querySelector(`[data-transfer-box="${CSS.escape(requestId)}"]`);
+  const sourceCenter = box?.querySelector('.request-transfer-from')?.value || '';
+  const targetCenter = box?.querySelector('.request-transfer-to')?.value || request.center;
+
+  if (request.center !== 'ไตดี') {
+    showToast('⚠️ ปุ่ม Transfer ใช้เฉพาะใบขอเบิกศูนย์ไตดี', 'error');
+    return;
+  }
+
+  if (!sourceCenter || !targetCenter) {
+    showToast('⚠️ กรุณาเลือกสต็อกต้นทางและปลายทาง', 'error');
+    return;
+  }
+
+  if (sourceCenter === targetCenter) {
+    showToast('⚠️ สต็อกต้นทางและปลายทางต้องไม่ใช่สต็อกเดียวกัน', 'error');
+    return;
+  }
+
+  const rows = Array.from(card.querySelectorAll('.pick-item-row'));
+  const items = [];
+
+  rows.forEach((row) => {
+    const input = row.querySelector('.prepared-qty-input');
+    const product = input?.dataset.product || '';
+    const qty = Number(input?.value) || 0;
+
+    if (!product || qty <= 0) return;
+    items.push({ product, qty });
+  });
+
+  if (!items.length) {
+    showToast('⚠️ ไม่มีรายการที่ต้อง Transfer', 'error');
+    return;
+  }
+
+  for (const item of items) {
+    const availableQty = (localStock[sourceCenter] || {})[item.product] || 0;
+    if (item.qty > availableQty) {
+      const unit = typeof getStockUnit === 'function' ? getStockUnit(sourceCenter, item.product) : '';
+      showToast(`⚠️ ${item.product} (${sourceCenter}): จำนวนไม่พอ มี ${availableQty}${unit ? ` ${unit}` : ''}`, 'error');
+      return;
+    }
+  }
+
+  const ok = confirm(`ยืนยัน Transfer รายการใบเบิก ${requestId} จาก ${sourceCenter} ไป ${targetCenter} ใช่ไหม?`);
+  if (!ok) return;
+
+  const button = card.querySelector('.request-transfer-inline');
+  if (button) button.disabled = true;
+
+  showToast('', 'loading', 'กำลัง Transfer ไปศูนย์ไตดี...');
+
+  try {
+    const transferId = `${requestId}-AUTO-${Date.now()}`;
+    const { data, error } = await supabaseClient.rpc('transfer_stock_now', {
+      p_transfer_id: transferId,
+      p_staff_code: currentUser.code,
+      p_date: new Date().toISOString().split('T')[0],
+      p_from_center: sourceCenter,
+      p_to_center: targetCenter,
+      p_note: `Auto transfer for request ${requestId}`,
+      p_items: items,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'Transfer ไม่สำเร็จ');
+    }
+
+    updateLocalStock('out', sourceCenter, items);
+    updateLocalStock('in', targetCenter, items);
+
+    rows.forEach((row) => {
+      const select = row.querySelector('.pick-stock-location');
+      if (select) select.value = targetCenter;
+    });
+
+    if (typeof fetchStock === 'function') {
+      await fetchStock();
+    }
+
+    showToast('✅ Transfer ไปพักที่ศูนย์ไตดีเรียบร้อย', 'success');
+    if (box) box.hidden = true;
+
+  } catch (error) {
+    console.error('transferRequestItemsToCenter error:', error);
+    showToast(`❌ ${error.message || 'Transfer ไปศูนย์ไตดีไม่สำเร็จ'}`, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function acceptTransfer(transferId) {
@@ -1013,12 +1220,26 @@ function renderAdminTransferForm() {
   document.getElementById('btn-transfer')?.addEventListener('click', submitTransfer);
   document.getElementById('transfer-from-center')?.addEventListener('change', refreshTransferInfo);
   document.getElementById('transfer-to-center')?.addEventListener('change', filterTransferTargetCenters);
-  document.getElementById('transfer-convert-from')?.addEventListener('change', filterTransferTargetCenters);
-  document.getElementById('transfer-convert-to')?.addEventListener('change', filterTransferTargetCenters);
-  enhanceProductSelect(document.getElementById('transfer-convert-from'));
-  enhanceProductSelect(document.getElementById('transfer-convert-to'));
+  document.getElementById('transfer-convert-from')?.addEventListener('change', () => {
+    filterTransferTargetCenters();
+    updateTransferConversionMode();
+  });
+  document.getElementById('transfer-convert-to')?.addEventListener('change', () => {
+    filterTransferTargetCenters();
+    updateTransferConversionMode();
+  });
+  enhanceStockProductFilter(document.getElementById('transfer-convert-from'));
+  enhanceStockProductFilter(document.getElementById('transfer-convert-to'));
+  ['transfer-convert-from', 'transfer-convert-to'].forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select?.tomselect) return;
+
+    select.tomselect.wrapper.classList.add('transfer-convert-select');
+    select.tomselect.control_input.setAttribute('placeholder', '— เลือกรายการสินค้า —');
+  });
 
   addProductRow('transfer');
+  updateTransferConversionMode();
   filterTransferTargetCenters();
 }
 
@@ -1287,12 +1508,36 @@ async function fetchPoStatus() {
       });
     }
 
+    const statusFilter = getPoStatusFilter();
+
+    if (statusFilter === 'received') {
+      poList = poList.filter((po) => po.status === 'received');
+    }
+
+    if (statusFilter === 'pending') {
+      poList = poList.filter((po) => po.status !== 'received');
+    }
+
     renderPoStatus(poList);
 
   } catch (error) {
     console.error('fetchPoStatus error:', error);
     box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลดสถานะ PO ไม่สำเร็จ')}</div>`;
   }
+}
+
+function getPoStatusFilter() {
+  return document.querySelector('.po-status-filter.is-active')?.dataset.poStatusFilter || 'pending';
+}
+
+function setPoStatusFilter(value) {
+  const nextFilter = value === 'received' ? 'received' : 'pending';
+
+  document.querySelectorAll('.po-status-filter').forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.poStatusFilter === nextFilter);
+  });
+
+  fetchPoStatus();
 }
 
 function renderPoStatus(poList) {
