@@ -337,18 +337,10 @@ function filterTransferTargetCenters() {
   const fromCenter = document.getElementById('transfer-from-center')?.value;
   const toSelect = document.getElementById('transfer-to-center');
   if (!toSelect) return;
-  const isProductConversion = Boolean(
-    document.getElementById('transfer-convert-from')?.value
-    || document.getElementById('transfer-convert-to')?.value
-  );
 
   Array.from(toSelect.options).forEach((option) => {
-    option.hidden = !isProductConversion && Boolean(option.value && option.value === fromCenter);
+    option.hidden = false;
   });
-
-  if (!isProductConversion && toSelect.value && toSelect.value === fromCenter) {
-    toSelect.value = '';
-  }
 }
 
 function enforceOwnCenter(type, center) {

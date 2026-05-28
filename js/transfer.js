@@ -60,6 +60,14 @@ async function submitTransfer() {
       : [];
   }
 
+  if (fromCenter === toCenter && isProductConversion) {
+    items = items.map((item) => ({
+      ...item,
+      target_product: item.target_product || item.targetProduct || convertToProduct,
+      targetProduct: item.targetProduct || item.target_product || convertToProduct,
+    }));
+  }
+
   if (items.length === 0) {
     showToast('⚠️ กรุณาเพิ่มรายการสินค้า Transfer', 'error');
     return;
@@ -400,7 +408,7 @@ function renderPendingTransfers(errorMessage = '') {
     }).join('');
 
     return `
-      <article class="stock-request-card" data-request-id="${escapeHtml(request.requestId || '')}">
+      <article class="stock-request-card ${isTaideeRequest ? 'is-taidee-request' : ''}" data-request-id="${escapeHtml(request.requestId || '')}">
         <div class="stock-request-head">
           <div>
             <span class="overview-label">เลขใบเบิก</span>
@@ -454,14 +462,14 @@ function renderPendingTransfers(errorMessage = '') {
 
             <div class="request-transfer-actions">
               <button
-                class="btn-request-secondary"
+                class="btn-request-secondary request-transfer-cancel"
                 type="button"
                 onclick="toggleRequestTransferBox('${escapeHtml(request.requestId || '')}')"
               >
                 ยกเลิก
               </button>
               <button
-                class="btn-request-primary"
+                class="btn-request-primary request-transfer-confirm"
                 type="button"
                 onclick="transferRequestItemsToCenter('${escapeHtml(request.requestId || '')}')"
               >
@@ -737,7 +745,20 @@ function toggleRequestTransferBox(requestId) {
   const box = document.querySelector(`[data-transfer-box="${CSS.escape(requestId)}"]`);
   if (!box) return;
 
-  box.hidden = !box.hidden;
+  const card = box.closest('.stock-request-card');
+  const isOpening = box.hidden;
+
+  box.hidden = !isOpening;
+  setRequestTransferMode(card, isOpening);
+}
+
+function setRequestTransferMode(card, enabled) {
+  if (!card) return;
+
+  card.classList.toggle('is-transfer-mode', Boolean(enabled));
+  card.querySelectorAll('.pick-stock-location').forEach((select) => {
+    select.disabled = Boolean(enabled);
+  });
 }
 
 async function transferRequestItemsToCenter(requestId) {
@@ -832,14 +853,33 @@ async function transferRequestItemsToCenter(requestId) {
     updateLocalStock('out', sourceCenter, items);
     updateLocalStock('in', targetCenter, items);
 
+    const preparedItems = items.map((item) => ({
+      ...item,
+      source_center: targetCenter,
+      sourceCenter: targetCenter,
+      stock_center: targetCenter,
+      center: targetCenter,
+    }));
+
+    await completeTransferredStockRequest(requestId, preparedItems);
+
     rows.forEach((row) => {
       const select = row.querySelector('.pick-stock-location');
       if (select) select.value = targetCenter;
     });
+    setRequestTransferMode(card, true);
 
     if (typeof fetchStock === 'function') {
       await fetchStock();
     }
+
+    pendingTransfers = pendingTransfers.filter((item) => item.requestId !== requestId);
+
+    if (typeof updatePendingBadge === 'function') {
+      updatePendingBadge(pendingTransfers.length);
+    }
+
+    card.remove();
 
     showToast('✅ Transfer ไปพักที่ศูนย์ไตดีเรียบร้อย', 'success');
     if (box) box.hidden = true;
@@ -850,6 +890,24 @@ async function transferRequestItemsToCenter(requestId) {
   } finally {
     if (button) button.disabled = false;
   }
+}
+
+async function completeTransferredStockRequest(requestId, items) {
+  const { data, error } = await supabaseClient.rpc('complete_stock_request_after_transfer', {
+    p_request_id: requestId,
+    p_staff_code: currentUser.code,
+    p_items: items,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'ปิดใบเบิกหลัง Transfer ไม่สำเร็จ');
+  }
+
+  if (!data || data.success !== true) {
+    throw new Error(data?.message || 'ปิดใบเบิกหลัง Transfer ไม่สำเร็จ');
+  }
+
+  return data;
 }
 
 async function acceptTransfer(transferId) {

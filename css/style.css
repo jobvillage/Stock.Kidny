@@ -1780,6 +1780,48 @@ button {
   margin-top: 12px;
 }
 
+.request-transfer-actions .request-transfer-cancel,
+.request-transfer-actions .request-transfer-confirm {
+  min-height: 48px;
+  border-radius: 18px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.request-transfer-actions .request-transfer-cancel {
+  background: #e8edf4;
+  color: #475569;
+}
+
+.request-transfer-actions .request-transfer-cancel:hover {
+  background: #dfe6ef;
+  color: #334155;
+}
+
+.request-transfer-actions .request-transfer-confirm {
+  background: linear-gradient(145deg, #19d38a, #0aa36a);
+}
+
+.request-transfer-actions .request-transfer-confirm:hover {
+  filter: brightness(0.98);
+  transform: translateY(-1px);
+}
+
+.stock-request-card.is-transfer-mode .po-items-head div:nth-child(2),
+.stock-request-card.is-transfer-mode .pick-stock-location {
+  color: #94a3b8;
+}
+
+.stock-request-card.is-transfer-mode .pick-stock-location {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  font-weight: 700;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 .stock-request-meta {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
