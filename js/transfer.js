@@ -9,13 +9,16 @@ async function submitTransfer() {
   const toCenter = document.getElementById('transfer-to-center').value;
   const note = document.getElementById('transfer-note').value.trim();
   const requestId = formRequestIds.transfer;
+  const convertFromProduct = document.getElementById('transfer-convert-from')?.value || '';
+  const convertToProduct = document.getElementById('transfer-convert-to')?.value || '';
+  const isProductConversion = Boolean(convertFromProduct || convertToProduct);
 
   if (!date || !fromCenter || !toCenter) {
     showToast('⚠️ กรุณากรอกวันที่ ศูนย์ต้นทาง และศูนย์ปลายทาง', 'error');
     return;
   }
 
-  if (fromCenter === toCenter) {
+  if (fromCenter === toCenter && !isProductConversion) {
     showToast('⚠️ ศูนย์ต้นทางและปลายทางต้องไม่ใช่ศูนย์เดียวกัน', 'error');
     return;
   }
@@ -23,7 +26,39 @@ async function submitTransfer() {
   if (!enforceOwnCenter('transfer', fromCenter)) return;
 
   const rows = document.querySelectorAll('#transfer-products .product-row');
-  const items = collectItemsFromRows(rows);
+  let items = collectItemsFromRows(rows);
+
+  if (isProductConversion) {
+    if (!convertFromProduct || !convertToProduct) {
+      showToast('⚠️ กรุณาเลือกสินค้าให้ครบทั้งช่องแปลงจากและแปลงเป็น', 'error');
+      return;
+    }
+
+    if (convertFromProduct === convertToProduct) {
+      showToast('⚠️ สินค้าที่แปลงจากและแปลงเป็นต้องไม่ใช่รายการเดียวกัน', 'error');
+      return;
+    }
+
+    let invalidQty = false;
+    const totalQty = Array.from(rows).reduce((sum, row) => {
+      const qtyText = String(row.querySelector('input[type=number]')?.value || '').trim();
+      if (!qtyText) return sum;
+      if (!/^\d+$/.test(qtyText)) {
+        invalidQty = true;
+        return sum;
+      }
+      return sum + Number(qtyText || 0);
+    }, 0);
+
+    if (invalidQty) {
+      showToast('⚠️ กรุณากรอกจำนวนเป็นเลขจำนวนเต็มเท่านั้น', 'error');
+      return;
+    }
+
+    items = totalQty > 0
+      ? [{ product: convertFromProduct, qty: totalQty, target_product: convertToProduct, targetProduct: convertToProduct }]
+      : [];
+  }
 
   if (items.length === 0) {
     showToast('⚠️ กรุณาเพิ่มรายการสินค้า Transfer', 'error');
@@ -40,7 +75,9 @@ async function submitTransfer() {
   showToast('', 'loading', 'กำลังสร้างรายการ Transfer...');
 
   try {
-    const { data, error } = await supabaseClient.rpc('create_transfer', {
+    const isImmediateTransfer = ['admin', 'adminR'].includes(currentUser?.role);
+    const rpcName = isImmediateTransfer ? 'transfer_stock_now' : 'create_transfer';
+    const { data, error } = await supabaseClient.rpc(rpcName, {
       p_transfer_id: requestId,
       p_staff_code: currentUser.code,
       p_date: date,
@@ -64,8 +101,20 @@ async function submitTransfer() {
     }
 
     updateLocalStock('out', fromCenter, items);
+    if (isImmediateTransfer) {
+      const targetItems = items.map((item) => ({
+        product: item.target_product || item.targetProduct || item.product,
+        qty: item.qty,
+      }));
+      updateLocalStock('in', toCenter, targetItems);
+    }
 
-    showToast('✅ สร้าง Transfer แล้ว รอศูนย์ปลายทางกดยืนยันรับ', 'success');
+    showToast(
+      isImmediateTransfer
+        ? '✅ Transfer สำเร็จ สต็อกปลายทางถูกเพิ่มแล้ว'
+        : '✅ สร้าง Transfer แล้ว รอศูนย์ปลายทางกดยืนยันรับ',
+      'success'
+    );
 
     formRequestIds.transfer = newRequestId('transfer');
     resetTransferForm();
@@ -74,8 +123,12 @@ async function submitTransfer() {
       fetchPendingTransfers();
     }
 
+    if (typeof fetchStock === 'function') {
+      fetchStock();
+    }
+
   } catch (error) {
-    console.error('Supabase create_transfer error:', error);
+    console.error('Supabase transfer error:', error);
     showToast(`❌ ${error.message || 'สร้าง Transfer ไม่สำเร็จ'}`, 'error');
   } finally {
     btn.disabled = false;
@@ -177,6 +230,12 @@ function resetTransferForm() {
   document.getElementById('transfer-person').value = `${currentUser.name} (${currentUser.code})`;
   document.getElementById('transfer-note').value = '';
   document.getElementById('transfer-to-center').value = '';
+  ['transfer-convert-from', 'transfer-convert-to'].forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    if (select.tomselect) select.tomselect.clear(true);
+    select.value = '';
+  });
   setToday('transfer-date');
 
   if (currentUser.role === 'center_staff') {
@@ -231,12 +290,20 @@ function renderPendingTransfers(errorMessage = '') {
     const itemRows = (request.items || []).map((item, index) => {
       const product = item.product || '';
       const qty = Number(item.qty) || 0;
+      const unit = String(
+        item.Unit
+        || item.unit
+        || item.unit_name
+        || (typeof getStockUnit === 'function' ? getStockUnit(request.center, product) : '')
+        || ''
+      ).trim();
+      const qtyText = unit ? `${qty} ${unit}` : String(qty);
 
       return `
         <div class="pick-item-row">
           <div class="pick-item-name">
             <strong>${escapeHtml(product)}</strong>
-            <small>จำนวนที่ขอ: ${qty} ชิ้น</small>
+            <small>จำนวนที่ขอ: ${escapeHtml(qtyText)}</small>
           </div>
 
           <div class="pick-item-source">
@@ -349,6 +416,181 @@ function renderPendingTransfers(errorMessage = '') {
       </article>
     `;
   }).join('');
+}
+
+function getRequestItemUnit(request, item) {
+  const product = item.product || '';
+  return String(
+    item.Unit
+    || item.unit
+    || item.unit_name
+    || (typeof getStockUnit === 'function' ? getStockUnit(request.center, product) : '')
+    || ''
+  ).trim();
+}
+
+function renderRequestHistoryCards(requestList, options = {}) {
+  if (!requestList.length) {
+    return `<div class="empty-state">${escapeHtml(options.emptyText || 'ไม่พบใบเบิกย้อนหลัง')}</div>`;
+  }
+
+  return requestList.map((request) => {
+    const items = Array.isArray(request.prepared_items) && request.prepared_items.length
+      ? request.prepared_items
+      : request.items || [];
+
+    const itemRows = items.map((item) => {
+      const unit = getRequestItemUnit(request, item);
+
+      return `
+        <div class="po-item-row">
+          <div class="po-item-name">${escapeHtml(item.product || '-')}</div>
+          <div class="po-item-qty">${Number(item.qty) || 0}</div>
+          <div class="po-item-unit">${escapeHtml(unit)}</div>
+        </div>
+      `;
+    }).join('');
+
+    const isCompleted = request.status === 'completed';
+    const requestId = request.request_id || request.requestId || '';
+    const printButton = isCompleted
+      ? `
+        <button
+          class="btn-request-secondary request-print-inline"
+          type="button"
+          onclick="printCompletedRequestPickList('${escapeHtml(requestId)}')"
+        >
+          พิมพ์ใบเบิก
+        </button>
+      `
+      : '';
+
+    return `
+      <article class="stock-request-card">
+        <div class="stock-request-head">
+          <div>
+            <span class="overview-label">เลขใบเบิก</span>
+            <strong>${escapeHtml(requestId || '-')}</strong>
+          </div>
+
+          <div class="request-head-actions">
+            <span class="overview-pill ${isCompleted ? 'is-ready' : ''}">
+              ${isCompleted ? 'จัดเตรียมเรียบร้อย' : 'รอดำเนินการ'}
+            </span>
+            ${printButton}
+          </div>
+        </div>
+
+        <div class="stock-request-meta">
+          <div>
+            <span>วันที่เบิก</span>
+            <strong>${escapeHtml(request.request_date || request.date || '-')}</strong>
+          </div>
+          <div>
+            <span>ศูนย์</span>
+            <strong>${escapeHtml(request.center || '-')}</strong>
+          </div>
+          <div>
+            <span>จัดของเมื่อ</span>
+            <strong>${request.picked_at ? new Date(request.picked_at).toLocaleString('th-TH') : '-'}</strong>
+          </div>
+        </div>
+
+        ${request.note ? `
+          <div class="stock-request-note">
+            <span>หมายเหตุ</span>
+            <p>${escapeHtml(request.note)}</p>
+          </div>
+        ` : ''}
+
+        <div class="stock-request-items">
+          <div class="stock-request-section-title">
+            ${isCompleted ? 'รายการที่จัดเตรียมแล้ว' : 'รายการที่ขอเบิก'}
+          </div>
+
+          <div class="po-items-table">
+            <div class="po-items-head">
+              <div>สินค้า</div>
+              <div>จำนวน</div>
+              <div>หน่วย</div>
+            </div>
+
+            ${itemRows}
+          </div>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+async function fetchAdminRequestHistory() {
+  if (!currentUser || !['admin', 'adminR', 'stock_receiver'].includes(currentUser.role)) return;
+
+  const box = document.getElementById('request-history-list');
+  if (!box) return;
+
+  const status = document.getElementById('request-history-status')?.value || '';
+  const center = document.getElementById('request-history-center')?.value || '';
+  const requestId = document.getElementById('request-history-id')?.value.trim() || '';
+
+  box.innerHTML = '<div class="empty-state">กำลังโหลดใบเบิกย้อนหลัง...</div>';
+
+  try {
+    const { data, error } = await supabaseClient.rpc('get_admin_stock_request_history', {
+      p_status: status,
+      p_center: center,
+      p_request_id: requestId,
+      p_staff_code: '',
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    window.adminRequestHistoryList = data || [];
+    box.innerHTML = renderRequestHistoryCards(window.adminRequestHistoryList, {
+      emptyText: 'ไม่พบใบเบิกย้อนหลังตามตัวกรอง',
+    });
+
+  } catch (error) {
+    console.error('fetchAdminRequestHistory error:', error);
+    box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลดใบเบิกย้อนหลังไม่สำเร็จ')}</div>`;
+  }
+}
+
+async function fetchStaffRequestHistory() {
+  if (!currentUser || currentUser.role !== 'center_staff') return;
+
+  const box = document.getElementById('request-status-list');
+  if (!box) return;
+
+  const status = document.getElementById('staff-request-history-status')?.value || '';
+  const center = document.getElementById('staff-request-history-center')?.value || '';
+  const requestId = document.getElementById('staff-request-history-id')?.value.trim() || '';
+
+  box.innerHTML = '<div class="empty-state">กำลังโหลดใบเบิกย้อนหลัง...</div>';
+
+  try {
+    const { data, error } = await supabaseClient.rpc('get_admin_stock_request_history', {
+      p_status: status,
+      p_center: center,
+      p_request_id: requestId,
+      p_staff_code: currentUser.code,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    window.currentRequestStatusList = data || [];
+    box.innerHTML = renderRequestHistoryCards(window.currentRequestStatusList, {
+      emptyText: 'ไม่พบใบเบิกย้อนหลังตามตัวกรอง',
+    });
+
+  } catch (error) {
+    console.error('fetchStaffRequestHistory error:', error);
+    box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลดใบเบิกย้อนหลังไม่สำเร็จ')}</div>`;
+  }
 }
 
 function renderTransferCard(transfer, index) {
@@ -717,6 +959,22 @@ function renderAdminTransferForm() {
         </select>
       </div>
 
+      <div class="field-group">
+        <label for="transfer-convert-from">แปลงจากสินค้า</label>
+        <select id="transfer-convert-from" class="product-select">
+          <option value=""></option>
+          ${getProductOptions()}
+        </select>
+      </div>
+
+      <div class="field-group">
+        <label for="transfer-convert-to">สินค้าที่แปลงแล้ว</label>
+        <select id="transfer-convert-to" class="product-select">
+          <option value=""></option>
+          ${getProductOptions()}
+        </select>
+      </div>
+
       <div class="field-group field-group-full">
         <label for="transfer-note">หมายเหตุ</label>
         <input type="text" id="transfer-note" placeholder="เช่น แก้ไขการรับเข้าผิดสต็อก / เลข PO ที่เกี่ยวข้อง" />
@@ -755,6 +1013,10 @@ function renderAdminTransferForm() {
   document.getElementById('btn-transfer')?.addEventListener('click', submitTransfer);
   document.getElementById('transfer-from-center')?.addEventListener('change', refreshTransferInfo);
   document.getElementById('transfer-to-center')?.addEventListener('change', filterTransferTargetCenters);
+  document.getElementById('transfer-convert-from')?.addEventListener('change', filterTransferTargetCenters);
+  document.getElementById('transfer-convert-to')?.addEventListener('change', filterTransferTargetCenters);
+  enhanceProductSelect(document.getElementById('transfer-convert-from'));
+  enhanceProductSelect(document.getElementById('transfer-convert-to'));
 
   addProductRow('transfer');
   filterTransferTargetCenters();
@@ -922,8 +1184,11 @@ async function submitPoCmo() {
 
     savePoCenterToCache(data.po_id || data.poId || data.po_no || data.poNo || '', center);
 
-    fetchPoStatus();
-    
+    const poSearch = document.getElementById('po-status-search');
+    if (poSearch) poSearch.value = '';
+
+    await fetchPoStatus();
+
     if (typeof fetchPendingPoSummary === 'function') {
       await fetchPendingPoSummary();
     }
@@ -1813,6 +2078,116 @@ function printPickList(requestId) {
   printWindow.document.close();
 }
 
+function printCompletedRequestPickList(requestId) {
+  const request = [
+    ...(window.currentRequestStatusList || []),
+    ...(window.adminRequestHistoryList || []),
+  ].find((item) => (item.request_id || item.requestId) === requestId);
+
+  if (!request) {
+    showToast('❌ ไม่พบใบขอเบิกนี้', 'error');
+    return;
+  }
+
+  const items = Array.isArray(request.prepared_items) && request.prepared_items.length
+    ? request.prepared_items
+    : request.items || [];
+
+  const itemRows = items.map((item, index) => {
+    const product = item.product || '';
+    const qty = Number(item.qty) || 0;
+    const unit = String(
+      item.Unit
+      || item.unit
+      || item.unit_name
+      || (typeof getStockUnit === 'function' ? getStockUnit(request.center, product) : '')
+      || ''
+    ).trim();
+
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(product || '-')}</td>
+        <td class="num">${qty}</td>
+        <td>${escapeHtml(unit)}</td>
+        <td></td>
+      </tr>
+    `;
+  }).join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+      <meta charset="UTF-8">
+      <title>ใบเบิก ${escapeHtml(request.request_id || '')}</title>
+      <style>
+        body { font-family: "Sarabun", Arial, sans-serif; padding: 24px; color: #111827; }
+        .doc { max-width: 760px; margin: 0 auto; }
+        h1 { text-align: center; font-size: 24px; margin: 0 0 20px; }
+        .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin-bottom: 18px; font-size: 14px; }
+        .meta div { border-bottom: 1px solid #d1d5db; padding: 6px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+        th, td { border: 1px solid #d1d5db; padding: 8px; }
+        th { background: #f3f4f6; text-align: center; }
+        .num { text-align: center; font-weight: 700; }
+        .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 52px; text-align: center; font-size: 14px; }
+        .line { border-top: 1px solid #111827; padding-top: 8px; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      <div class="doc">
+        <h1>ใบเบิกสินค้า</h1>
+
+        <div class="meta">
+          <div><strong>เลขใบเบิก:</strong> ${escapeHtml(request.request_id || '-')}</div>
+          <div><strong>วันที่เบิก:</strong> ${escapeHtml(request.request_date || '-')}</div>
+          <div><strong>ศูนย์:</strong> ${escapeHtml(request.center || '-')}</div>
+          <div><strong>จัดของเมื่อ:</strong> ${request.picked_at ? new Date(request.picked_at).toLocaleString('th-TH') : '-'}</div>
+          <div><strong>วันที่พิมพ์:</strong> ${new Date().toLocaleString('th-TH')}</div>
+          <div><strong>สถานะ:</strong> จัดเตรียมเรียบร้อย</div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 46px;">ลำดับ</th>
+              <th>รายการสินค้า</th>
+              <th style="width: 90px;">จำนวน</th>
+              <th style="width: 90px;">หน่วย</th>
+              <th style="width: 120px;">หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="signatures">
+          <div><div class="line">ผู้ส่งมอบ</div></div>
+          <div><div class="line">ผู้รับของ</div></div>
+        </div>
+      </div>
+
+      <script>
+        window.onload = function () {
+          window.print();
+        };
+      </script>
+    </body>
+    </html>
+  `;
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ใบเบิก', 'error');
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
 function getPoRemainingItems(po) {
   const requestedItems = Array.isArray(po.items) ? po.items : [];
   const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
@@ -2202,6 +2577,8 @@ function renderRequestStatus(requestList) {
   const box = document.getElementById('request-status-list');
   if (!box) return;
 
+  window.currentRequestStatusList = requestList || [];
+
   const badge = document.getElementById('request-status-badge');
 
   // ปิด badge เก่าถาวร ไม่ให้นับ completed ทุกครั้งที่ login
@@ -2217,70 +2594,7 @@ function renderRequestStatus(requestList) {
     return;
   }
 
-  box.innerHTML = requestList.map((request) => {
-    const items = Array.isArray(request.prepared_items) && request.prepared_items.length
-      ? request.prepared_items
-      : request.items || [];
-
-    const itemRows = items.map((item) => `
-      <div class="po-item-row">
-        <div class="po-item-name">${escapeHtml(item.product || '-')}</div>
-        <div class="po-item-qty">${Number(item.qty) || 0}</div>
-        <div class="po-item-unit">ชิ้น</div>
-      </div>
-    `).join('');
-
-    return `
-      <article class="stock-request-card">
-        <div class="stock-request-head">
-          <div>
-            <span class="overview-label">เลขใบเบิก</span>
-            <strong>${escapeHtml(request.request_id || '-')}</strong>
-          </div>
-
-          <span class="overview-pill ${request.status === 'completed' ? 'is-ready' : ''}">
-            ${request.status === 'completed' ? 'จัดเตรียมเรียบร้อย' : 'รอดำเนินการ'}
-          </span>
-        </div>
-
-        <div class="stock-request-meta">
-          <div>
-            <span>วันที่เบิก</span>
-            <strong>${escapeHtml(request.request_date || '-')}</strong>
-          </div>
-          <div>
-            <span>ศูนย์</span>
-            <strong>${escapeHtml(request.center || '-')}</strong>
-          </div>
-          <div>
-            <span>จัดของเมื่อ</span>
-            <strong>${request.picked_at ? new Date(request.picked_at).toLocaleString('th-TH') : '-'}</strong>
-          </div>
-        </div>
-
-        ${request.note ? `
-          <div class="stock-request-note">
-            <span>หมายเหตุ</span>
-            <p>${escapeHtml(request.note)}</p>
-          </div>
-        ` : ''}
-
-        <div class="stock-request-items">
-          <div class="stock-request-section-title">
-            ${request.status === 'completed' ? 'รายการที่จัดเตรียมแล้ว' : 'รายการที่ขอเบิก'}
-          </div>
-
-          <div class="po-items-table">
-            <div class="po-items-head">
-              <div>สินค้า</div>
-              <div>จำนวน</div>
-              <div>หน่วย</div>
-            </div>
-
-            ${itemRows}
-          </div>
-        </div>
-      </article>
-    `;
-  }).join('');
+  box.innerHTML = renderRequestHistoryCards(requestList, {
+    emptyText: 'ยังไม่มีใบเบิกที่ต้องแสดง',
+  });
 }

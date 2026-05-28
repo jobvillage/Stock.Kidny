@@ -1048,6 +1048,23 @@ button {
   margin-bottom: 12px;
 }
 
+.pending-toolbar-with-filters {
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pending-toolbar-with-filters .request-history-filters {
+  flex: 1 1 620px;
+  margin: 0;
+}
+
+.pending-toolbar-with-filters .pending-refresh {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
 .pending-refresh {
   color: #2767b1;
   background: rgba(74, 144, 226, 0.13);
@@ -1547,6 +1564,31 @@ button {
   }
 }
 
+.stock-view-toolbar-3 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.stock-view-toolbar-3 .field-group {
+  display: grid;
+  gap: 8px;
+}
+
+.request-history-filters {
+  margin: 10px 0 14px;
+}
+
+.request-history-list {
+  margin-top: 12px;
+}
+
+@media (min-width: 840px) {
+  .stock-view-toolbar-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
 /* ===== Tom Select ===== */
 .ts-wrapper {
   width: 100%;
@@ -1687,6 +1729,21 @@ button {
   background: rgba(22, 199, 132, 0.12);
   font-size: 12px;
   font-weight: 700;
+}
+
+.request-head-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.request-print-inline {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .stock-request-meta {

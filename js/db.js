@@ -154,6 +154,10 @@ async function fetchPendingTransfers() {
       createdAt: item.created_at,
     }));
 
+    if (!Object.keys(localStockUnits || {}).length) {
+      await fetchStockUnitsFromTable();
+    }
+
     renderPendingTransfers();
 
   } catch (error) {

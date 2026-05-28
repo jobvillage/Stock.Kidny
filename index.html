@@ -10,7 +10,7 @@
   <link rel="icon" href="data:,">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260527-admin-transfer1">
+  <link rel="stylesheet" href="css/style.css?v=20260528-staff-history1">
 </head>
 <body>
   <section class="login-screen" id="login-screen">
@@ -164,9 +164,38 @@
           </div>
         </div>
 
-        <div class="pending-toolbar">
+        <div class="pending-toolbar pending-toolbar-with-filters">
           <button class="btn-add-row pending-refresh" type="button" id="btn-refresh-request-status">
             รีเฟรชรายการ
+          </button>
+
+          <div class="stock-view-toolbar stock-view-toolbar-3 request-history-filters">
+            <div class="field-group">
+              <label for="staff-request-history-status">สถานะใบเบิก</label>
+              <select id="staff-request-history-status">
+                <option value="completed" selected>ใบเบิกที่จัดเตรียมแล้ว</option>
+                <option value="">ทุกสถานะ</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label for="staff-request-history-center">ศูนย์ที่เบิก</label>
+              <select id="staff-request-history-center">
+                <option value="">ทุกศูนย์</option>
+                <option value="ไตบน">ไตบน</option>
+                <option value="ไตล่าง">ไตล่าง</option>
+                <option value="ไตดี">ไตดี</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label for="staff-request-history-id">เลขที่ใบเบิก</label>
+              <input type="text" id="staff-request-history-id" placeholder="เช่น REQ-20260528-008" />
+            </div>
+          </div>
+
+          <button class="btn-add-row pending-refresh" type="button" id="btn-fetch-staff-request-history">
+            เรียกดูใบเบิกย้อนหลัง
           </button>
         </div>
 
@@ -362,12 +391,54 @@
           </div>
         </div>
 
-        <div class="pending-toolbar">
+        <div class="pending-toolbar pending-toolbar-with-filters">
           <button class="btn-add-row pending-refresh" type="button" id="btn-refresh-transfers">รีเฟรชรายการ</button>
+
+          <div class="stock-view-toolbar stock-view-toolbar-3 request-history-filters">
+            <div class="field-group">
+              <label for="request-history-status">สถานะใบเบิก</label>
+              <select id="request-history-status">
+                <option value="completed" selected>ใบเบิกที่จัดเตรียมแล้ว</option>
+                <option value="">ทุกสถานะ</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label for="request-history-center">ศูนย์ที่เบิก</label>
+              <select id="request-history-center">
+                <option value="">ทุกศูนย์</option>
+                <option value="ไตบน">ไตบน</option>
+                <option value="ไตล่าง">ไตล่าง</option>
+                <option value="ไตดี">ไตดี</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label for="request-history-id">เลขที่ใบเบิก</label>
+              <input type="text" id="request-history-id" placeholder="เช่น REQ-20260528-008" />
+            </div>
+          </div>
+
+          <button class="btn-add-row pending-refresh" type="button" id="btn-fetch-request-history">
+            เรียกดูใบเบิกย้อนหลัง
+          </button>
         </div>
 
         <div id="pending-transfers" class="pending-list">
           <div class="empty-state">ยังไม่มีรายการรอรับ</div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="products-header">
+          <div>
+            <span>ค้นหาใบเบิกย้อนหลัง</span>
+            <small>เรียกดูใบเบิกที่จัดเตรียมแล้วตามศูนย์หรือเลขที่ใบเบิก</small>
+          </div>
+        </div>
+
+        <div id="request-history-list" class="pending-list request-history-list">
+          <div class="empty-state">เลือกตัวกรองแล้วกดเรียกดูใบเบิกย้อนหลัง</div>
         </div>
       </section>
     </main>
@@ -380,11 +451,11 @@
 
 <script src="js/utils.js?v=20260514-deploy1" defer></script>
 <script src="js/supabase.js?v=20260514-deploy1" defer></script>
-<script src="js/auth.js?v=20260527-admin-transfer1" defer></script>
-<script src="js/db.js?v=20260527-unit1" defer></script>
+<script src="js/auth.js?v=20260528-transfer-convert1" defer></script>
+<script src="js/db.js?v=20260528-request-unit1" defer></script>
 <script src="js/stock.js?v=20260527-unit1" defer></script>
-<script src="js/transfer.js?v=20260527-admin-transfer1" defer></script>
+<script src="js/transfer.js?v=20260528-po-stay-after-create1" defer></script>
 <script src="js/ui.js?v=20260527-unit1" defer></script>
-<script src="js/app.js?v=20260527-admin-transfer1" defer></script>
+<script src="js/app.js?v=20260528-staff-history1" defer></script>
 </body>
 </html>

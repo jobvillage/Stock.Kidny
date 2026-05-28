@@ -213,6 +213,22 @@ function bindStaticEvents() {
   document.getElementById('hub-product-filter')?.addEventListener('change', renderHubStockDashboard);
   document.getElementById('btn-refresh-po-status')?.addEventListener('click', fetchPoStatus);
   document.getElementById('btn-refresh-request-status')?.addEventListener('click', fetchRequestStatus);
+  document.getElementById('btn-fetch-staff-request-history')?.addEventListener('click', fetchStaffRequestHistory);
+  document.getElementById('staff-request-history-status')?.addEventListener('change', fetchStaffRequestHistory);
+  document.getElementById('staff-request-history-center')?.addEventListener('change', fetchStaffRequestHistory);
+  document.getElementById('staff-request-history-id')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && typeof fetchStaffRequestHistory === 'function') {
+      fetchStaffRequestHistory();
+    }
+  });
+  document.getElementById('btn-fetch-request-history')?.addEventListener('click', fetchAdminRequestHistory);
+  document.getElementById('request-history-status')?.addEventListener('change', fetchAdminRequestHistory);
+  document.getElementById('request-history-center')?.addEventListener('change', fetchAdminRequestHistory);
+  document.getElementById('request-history-id')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && typeof fetchAdminRequestHistory === 'function') {
+      fetchAdminRequestHistory();
+    }
+  });
   document.getElementById('btn-refresh-stock-view')?.addEventListener('click', refreshStockViewOnly);
   document.getElementById('btn-auto-po-stock-view')?.addEventListener('click', openAutoPoFromStock);
   document.getElementById('btn-print-stock-view')?.addEventListener('click', printStockView);
