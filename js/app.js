@@ -198,6 +198,10 @@ function bindStaticEvents() {
     renderStockDashboard();
   });
 
+  document.getElementById('stock-product-type-filter')?.addEventListener('change', () => {
+    renderStockDashboard();
+  });
+
   document.getElementById('btn-refresh-hub-stock')?.addEventListener('click', () => {
     fetchStock();
     renderHubStockDashboard();

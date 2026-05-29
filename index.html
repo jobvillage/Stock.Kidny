@@ -10,7 +10,7 @@
   <link rel="icon" href="data:,">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260529-cancel-status1">
+  <link rel="stylesheet" href="css/style.css?v=20260529-stock-type-filter1">
 </head>
 <body>
   <section class="login-screen" id="login-screen">
@@ -340,7 +340,7 @@
           </div>
         </div>
 
-        <div class="stock-view-toolbar stock-view-toolbar-2">
+        <div class="stock-view-toolbar stock-view-toolbar-stock">
           <div class="field-group">
             <label for="stock-center-filter">เลือกศูนย์</label>
             <select id="stock-center-filter">
@@ -350,6 +350,15 @@
               <option value="ไตบน">ไตบน</option>
               <option value="ไตล่าง">ไตล่าง</option>
               <option value="ไตดี">ไตดี</option>
+            </select>
+          </div>
+
+          <div class="field-group">
+            <label for="stock-product-type-filter">ประเภทสินค้า</label>
+            <select id="stock-product-type-filter">
+              <option value="">ทุกประเภท</option>
+              <option value="คุรุภัณฑ์">คุรุภัณฑ์</option>
+              <option value="น้ำยาฟอกไต">น้ำยาฟอกไต</option>
             </select>
           </div>
 
@@ -460,10 +469,10 @@
 <script src="js/utils.js?v=20260529-normalized-stock-key-all1" defer></script>
 <script src="js/supabase.js?v=20260514-deploy1" defer></script>
 <script src="js/auth.js?v=20260528-transfer-same-center1" defer></script>
-<script src="js/db.js?v=20260528-request-unit1" defer></script>
-<script src="js/stock.js?v=20260529-normalized-stock-key-all1" defer></script>
+<script src="js/db.js?v=20260529-stock-product-type1" defer></script>
+<script src="js/stock.js?v=20260529-stock-thai-fix1" defer></script>
 <script src="js/transfer.js?v=20260529-normalized-stock-key-all1" defer></script>
 <script src="js/ui.js?v=20260529-normalized-stock-key-all1" defer></script>
-<script src="js/app.js?v=20260528-po-status-filter1" defer></script>
+<script src="js/app.js?v=20260529-stock-type-filter1" defer></script>
 </body>
 </html>

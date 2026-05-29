@@ -1639,9 +1639,24 @@ button {
   gap: 8px;
 }
 
+.stock-view-toolbar-stock {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.stock-view-toolbar-stock .field-group {
+  display: grid;
+  gap: 8px;
+}
+
 @media (min-width: 720px) {
   .stock-view-toolbar-2 {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .stock-view-toolbar-stock {
+    grid-template-columns: 1fr 1fr 1fr;
   }
 }
 
@@ -2593,10 +2608,15 @@ button {
 .stock-scroll-row > div {
   height: 82px;
   box-sizing: border-box;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.stock-fixed-head,
+.stock-fixed-cell,
+.stock-scroll-row > div {
   padding: 14px 12px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #e5e7eb;
   font-weight: 900;
 }
 

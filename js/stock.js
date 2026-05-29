@@ -1,4 +1,4 @@
-let pendingPoSummary = {};
+﻿let pendingPoSummary = {};
 
 const STOCK_VIEW_RULES = {
   'ไตบน': {
@@ -26,6 +26,41 @@ function setStockUnit(center, product, unit) {
   }
 
   localStockUnits[center][product] = normalizedUnit;
+}
+
+function setStockProductType(center, product, type) {
+  const normalizedType = String(type || '').trim();
+  if (!center || !product || !normalizedType) return;
+
+  if (!localStockTypes[center]) {
+    localStockTypes[center] = {};
+  }
+
+  localStockTypes[center][product] = normalizedType;
+}
+
+function getStockProductType(center, product) {
+  const type = String(localStockTypes?.[center]?.[product] || '').trim();
+  if (type || !product) return type;
+
+  const normalizedProduct = normalizeProductKey(product);
+  const matchedTypeProduct = Object.keys(localStockTypes?.[center] || {})
+    .find((stockProduct) => normalizeProductKey(stockProduct) === normalizedProduct);
+
+  if (matchedTypeProduct) {
+    return String(localStockTypes[center][matchedTypeProduct] || '').trim();
+  }
+
+  const matchedCenter = Object.keys(localStockTypes || {})
+    .find((stockCenter) => Object.keys(localStockTypes?.[stockCenter] || {})
+      .some((stockProduct) => normalizeProductKey(stockProduct) === normalizedProduct));
+
+  if (!matchedCenter) return '';
+
+  const matchedProduct = Object.keys(localStockTypes?.[matchedCenter] || {})
+    .find((stockProduct) => normalizeProductKey(stockProduct) === normalizedProduct);
+
+  return matchedProduct ? String(localStockTypes[matchedCenter][matchedProduct] || '').trim() : '';
 }
 
 function getStockUnit(center, product) {
@@ -165,7 +200,7 @@ function getStockOrderMessage(center, product, currentQty) {
   if (min === '' || max === '') return '';
 
   const projectedQty = Number(currentQty || 0) + getTransferTrendQty(center, product);
-  return projectedQty < min ? 'สินค้าต้อง เปิด PO' : '';
+  return projectedQty < min ? 'สินค้าต้องเปิด PO' : '';
 }
 
 function getAutoPoQty(center, product, currentQty) {
@@ -442,6 +477,10 @@ function getStockProductFilter() {
   return value === '__all__' ? '' : value;
 }
 
+function getStockProductTypeFilter() {
+  return document.getElementById('stock-product-type-filter')?.value || '';
+}
+
 function getAllStockCenters() {
   const configuredCenters = Array.isArray(window.CENTERS) ? window.CENTERS : [];
   const stockCenters = Object.keys(localStock || {}).map((center) => (
@@ -459,11 +498,18 @@ function renderStockDashboard() {
   try {
     const selectedCenter = document.getElementById('stock-center-filter')?.value || '';
     const selectedProduct = getStockProductFilter();
+    const selectedProductType = getStockProductTypeFilter();
 
     const stockCenters = getStockDashboardCenters(selectedCenter);
     const primaryCenter = stockCenters[0] || currentUser?.center || selectedCenter || '';
 
-    const productList = getStockDashboardProducts(stockCenters, primaryCenter, selectedProduct);
+    let productList = getStockDashboardProducts(stockCenters, primaryCenter, selectedProduct);
+    if (selectedProductType) {
+      const normalizedType = normalizeProductKey(selectedProductType);
+      productList = productList.filter((product) => (
+        normalizeProductKey(getStockProductType(primaryCenter, product)) === normalizedType
+      ));
+    }
 
     if (productList.length === 0) {
       box.innerHTML = '<div class="empty-state">ไม่พบรายการสินค้า</div>';
@@ -524,9 +570,7 @@ function renderStockDashboard() {
     const gridTemplate = `repeat(${columns.length}, minmax(120px, 1fr))`;
 
     const fixedRows = productList.map((product) => `
-      <div class="stock-fixed-cell">
-        ${escapeHtml(product)}
-      </div>
+      <div class="stock-fixed-cell stock-product-name">${escapeHtml(product)}</div>
     `).join('');
 
     const scrollHead = `
@@ -916,3 +960,4 @@ function renderHubStockDashboard() {
     </div>
   `;
 }
+

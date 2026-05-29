@@ -1,5 +1,6 @@
 let localStock = {};
 let localStockUnits = {};
+let localStockTypes = {};
 let pendingTransfers = [];
 let stockViewTransfers = [];
 
@@ -10,6 +11,7 @@ function saveStockCache() {
     localStorage.setItem(DB_STOCK_CACHE_KEY, JSON.stringify({
       stock: localStock,
       units: localStockUnits,
+      types: localStockTypes,
       savedAt: new Date().toISOString(),
     }));
   } catch (error) {
@@ -27,6 +29,7 @@ function loadStockCache() {
 
     localStock = data.stock;
     localStockUnits = data.units || {};
+    localStockTypes = data.types || {};
 
     refreshInBadges();
     refreshOutInfo();
@@ -43,7 +46,7 @@ function loadStockCache() {
 async function fetchStockUnitsFromTable() {
   const { data, error } = await supabaseClient
     .from('stock_items')
-    .select('center, product, unit');
+    .select('center, product, unit, product_type');
 
   if (error) {
     console.warn('Load stock units failed:', error);
@@ -57,6 +60,10 @@ async function fetchStockUnitsFromTable() {
 
     if (typeof setStockUnit === 'function') {
       setStockUnit(center, item.product, item.unit);
+    }
+
+    if (typeof setStockProductType === 'function') {
+      setStockProductType(center, item.product, item.product_type);
     }
   });
 }
@@ -77,6 +84,7 @@ async function fetchStock() {
     // reset localStock ก่อนเติมข้อมูลใหม่จาก Supabase
     localStock = {};
     localStockUnits = {};
+    localStockTypes = {};
     stockMinMaxFromSupabase = {};
 
     (data || []).forEach((item) => {
@@ -93,6 +101,10 @@ async function fetchStock() {
 
       if (typeof setStockUnit === 'function') {
         setStockUnit(center, product, item.Unit || item.unit || item.unit_name || item.product_unit || item.uom);
+      }
+
+      if (typeof setStockProductType === 'function') {
+        setStockProductType(center, product, item.product_type || item.type || item.category || item.product_category);
       }
 
       if (typeof setStockMinMaxFromSupabase === 'function') {
