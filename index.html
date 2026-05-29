@@ -10,7 +10,7 @@
   <link rel="icon" href="data:,">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260528-transfer-mode-lock1">
+  <link rel="stylesheet" href="css/style.css?v=20260529-cancel-status1">
 </head>
 <body>
   <section class="login-screen" id="login-screen">
@@ -174,6 +174,7 @@
               <label for="staff-request-history-status">สถานะใบเบิก</label>
               <select id="staff-request-history-status">
                 <option value="completed" selected>ใบเบิกที่จัดเตรียมแล้ว</option>
+                <option value="cancelled">ใบเบิกที่ยกเลิก</option>
                 <option value="">ทุกสถานะ</option>
               </select>
             </div>
@@ -405,6 +406,7 @@
               <label for="request-history-status">สถานะใบเบิก</label>
               <select id="request-history-status">
                 <option value="completed" selected>ใบเบิกที่จัดเตรียมแล้ว</option>
+                <option value="cancelled">ใบเบิกที่ยกเลิก</option>
                 <option value="">ทุกสถานะ</option>
               </select>
             </div>
@@ -460,7 +462,7 @@
 <script src="js/auth.js?v=20260528-transfer-same-center1" defer></script>
 <script src="js/db.js?v=20260528-request-unit1" defer></script>
 <script src="js/stock.js?v=20260527-unit1" defer></script>
-<script src="js/transfer.js?v=20260528-transfer-same-center-convert1" defer></script>
+<script src="js/transfer.js?v=20260529-cancel-status1" defer></script>
 <script src="js/ui.js?v=20260528-convert-lock1" defer></script>
 <script src="js/app.js?v=20260528-po-status-filter1" defer></script>
 </body>

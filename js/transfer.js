@@ -548,6 +548,15 @@ function renderRequestHistoryCards(requestList, options = {}) {
     }).join('');
 
     const isCompleted = request.status === 'completed';
+    const isCancelled = request.status === 'cancelled';
+    const statusText = isCancelled
+      ? 'ใบเบิกนี้ถูกยกเลิก'
+      : isCompleted
+        ? 'จัดเตรียมเรียบร้อย'
+        : 'รอดำเนินการ';
+    const sectionTitle = isCompleted
+      ? 'รายการที่จัดเตรียมแล้ว'
+      : 'รายการที่ขอเบิก';
     const requestId = request.request_id || request.requestId || '';
     const printButton = isCompleted
       ? `
@@ -570,8 +579,8 @@ function renderRequestHistoryCards(requestList, options = {}) {
           </div>
 
           <div class="request-head-actions">
-            <span class="overview-pill ${isCompleted ? 'is-ready' : ''}">
-              ${isCompleted ? 'จัดเตรียมเรียบร้อย' : 'รอดำเนินการ'}
+            <span class="overview-pill ${isCompleted ? 'is-ready' : ''} ${isCancelled ? 'is-cancelled' : ''}">
+              ${escapeHtml(statusText)}
             </span>
             ${printButton}
           </div>
@@ -601,7 +610,7 @@ function renderRequestHistoryCards(requestList, options = {}) {
 
         <div class="stock-request-items">
           <div class="stock-request-section-title">
-            ${isCompleted ? 'รายการที่จัดเตรียมแล้ว' : 'รายการที่ขอเบิก'}
+            ${escapeHtml(sectionTitle)}
           </div>
 
           <div class="po-items-table">
@@ -1023,7 +1032,7 @@ async function completeStockRequest(requestId) {
 
   const inputs = card.querySelectorAll('.prepared-qty-input');
 
-  const items = Array.from(inputs)
+  const allItems = Array.from(inputs)
     .map((input) => {
       const row = input.closest('.pick-item-row');
       const sourceCenter = row?.querySelector('.pick-stock-location')?.value || 'สต็อกใหญ่';
@@ -1037,7 +1046,14 @@ async function completeStockRequest(requestId) {
         center: sourceCenter,
       };
     })
-    .filter((item) => item.product && item.qty > 0);
+    .filter((item) => item.product);
+
+  const items = allItems.filter((item) => item.qty > 0);
+
+  if (items.length === 0 && allItems.length === 1) {
+    await cancelStockRequest(requestId, allItems);
+    return;
+  }
 
   if (items.length === 0) {
     showToast('⚠️ กรุณาระบุจำนวนที่จัดอย่างน้อย 1 รายการ', 'error');
@@ -1102,6 +1118,36 @@ async function completeStockRequest(requestId) {
   } catch (error) {
     console.error('complete_stock_request error:', error);
     showToast(`❌ ${error.message || 'ยืนยันจัดของไม่สำเร็จ'}`, 'error');
+  }
+}
+
+async function cancelStockRequest(requestId, items = []) {
+  const ok = confirm(`ยืนยันยกเลิกใบเบิก ${requestId} ใช่ไหม? รายการนี้จะไม่ตัดสต็อก`);
+  if (!ok) return;
+
+  showToast('', 'loading', 'กำลังยกเลิกใบเบิก...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('cancel_stock_request', {
+      p_request_id: requestId,
+      p_staff_code: currentUser.code,
+      p_items: items,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'ยกเลิกใบเบิกไม่สำเร็จ');
+    }
+
+    showToast('✅ ยกเลิกใบเบิกเรียบร้อย', 'success');
+    fetchPendingTransfers();
+
+  } catch (error) {
+    console.error('cancel_stock_request error:', error);
+    showToast(`❌ ${error.message || 'ยกเลิกใบเบิกไม่สำเร็จ'}`, 'error');
   }
 }
 
@@ -1176,6 +1222,7 @@ function renderPoCmoForm() {
 
   document.getElementById('btn-add-po-row')?.addEventListener('click', addPoRow);
   document.getElementById('btn-submit-po')?.addEventListener('click', submitPoCmo);
+  document.getElementById('po-center')?.addEventListener('change', updateAllPoRowUnits);
 
   addPoRow();
 }
@@ -1374,7 +1421,10 @@ function addPoRow() {
       ${getProductOptions()}
     </select>
 
-    <input type="number" min="1" inputmode="numeric" placeholder="จำนวน" aria-label="จำนวนเปิด PO" />
+    <div class="qty-input-with-unit po-qty-input-wrap">
+      <input type="number" min="1" inputmode="numeric" placeholder="จำนวน" aria-label="จำนวนเปิด PO" />
+      <span class="qty-unit po-unit-label" hidden></span>
+    </div>
 
     <button class="btn-remove-row" type="button" title="ลบรายการ" aria-label="ลบรายการ">×</button>
   `;
@@ -1385,8 +1435,31 @@ function addPoRow() {
 
   const select = row.querySelector('.product-select');
   if (select && typeof enhanceProductSelect === 'function') {
+    select.addEventListener('change', () => updatePoRowUnit(row));
     enhanceProductSelect(select);
   }
+
+  updatePoRowUnit(row);
+}
+
+function updatePoRowUnit(row) {
+  if (!row) return;
+
+  const product = row.querySelector('.product-select')?.value || '';
+  const center = document.getElementById('po-center')?.value || currentUser?.center || '';
+  const unit = product && typeof getStockUnit === 'function' ? getStockUnit(center, product) : '';
+  const wrap = row.querySelector('.po-qty-input-wrap');
+  const label = row.querySelector('.po-unit-label');
+
+  if (!wrap || !label) return;
+
+  label.textContent = unit;
+  label.hidden = !unit;
+  wrap.classList.toggle('has-unit', Boolean(unit));
+}
+
+function updateAllPoRowUnits() {
+  document.querySelectorAll('#po-products .po-row').forEach((row) => updatePoRowUnit(row));
 }
 
 async function submitPoCmo() {
@@ -1402,8 +1475,9 @@ async function submitPoCmo() {
   const items = Array.from(rows).map((row) => {
     const product = row.querySelector('select')?.value || '';
     const qty = Number(row.querySelector('input[type="number"]')?.value) || 0;
+    const unit = product && typeof getStockUnit === 'function' ? getStockUnit(center, product) : '';
 
-    return { product, qty, center, stock_center: center };
+    return { product, qty, unit, center, stock_center: center };
   }).filter((item) => item.product && item.qty > 0);
 
   if (!date) {
@@ -1598,6 +1672,22 @@ function setPoStatusFilter(value) {
   fetchPoStatus();
 }
 
+function getPoItemUnit(item = {}, center = '') {
+  const product = item.product || '';
+  return String(
+    item.Unit
+    || item.unit
+    || item.unit_name
+    || (typeof getStockUnit === 'function' ? getStockUnit(center, product) : '')
+    || ''
+  ).trim();
+}
+
+function formatPoQty(qty, unit = '') {
+  const qtyText = String(Number(qty) || 0);
+  return unit ? `${qtyText} ${unit}` : qtyText;
+}
+
 function renderPoStatus(poList) {
   const box = document.getElementById('po-status-list');
   if (!box) return;
@@ -1627,6 +1717,7 @@ function renderPoStatus(poList) {
     const itemList = items.map((item) => {
       const product = item.product || '';
       const orderedQty = Number(item.qty) || 0;
+      const unit = getPoItemUnit(item, poCenter);
 
       const receivedQty = receivedItems
         .filter((received) => received.product === product)
@@ -1670,6 +1761,8 @@ function renderPoStatus(poList) {
             <strong>${orderedQty}</strong>
             ${receivedLabel}
           </div>
+
+          <div class="po-item-unit">${escapeHtml(unit)}</div>
         </div>
       `;
     }).join('');
@@ -1743,6 +1836,7 @@ function renderPoStatus(poList) {
             <div class="po-items-head">
               <div>สินค้า</div>
               <div>จำนวน</div>
+              <div>หน่วย</div>
             </div>
 
             ${itemList}
