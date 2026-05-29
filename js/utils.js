@@ -114,7 +114,9 @@ function mergeDuplicateItems(items) {
 
 function validateStockEnough(center, items) {
   for (const { product, qty } of items) {
-    const availableQty = (localStock[center] || {})[product] || 0;
+    const availableQty = typeof getStockQty === 'function'
+      ? getStockQty(center, product)
+      : ((localStock[center] || {})[product] || 0);
     if (qty > availableQty) {
       return {
         ok: false,

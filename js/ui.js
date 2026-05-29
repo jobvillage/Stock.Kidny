@@ -10,11 +10,19 @@ async function loadProductsFromSupabase() {
       throw error;
     }
 
-    const uniqueProducts = [...new Set(
-      (data || [])
-        .map((item) => item.product)
-        .filter(Boolean)
-    )].sort((a, b) => a.localeCompare(b, 'th'));
+    const productMap = new Map();
+    (data || [])
+      .map((item) => item.product)
+      .filter(Boolean)
+      .forEach((product) => {
+        const key = typeof normalizeProductKey === 'function'
+          ? normalizeProductKey(product)
+          : String(product).trim().toLowerCase();
+        if (!productMap.has(key)) productMap.set(key, product);
+      });
+
+    const uniqueProducts = [...productMap.values()]
+      .sort((a, b) => a.localeCompare(b, 'th'));
 
     PRODUCTS.splice(0, PRODUCTS.length, ...uniqueProducts);
 
@@ -304,10 +312,11 @@ function updateStockInfo(select) {
     return;
   }
 
-  const stock = getStockForCenter('out');
-  const qty = stock[product] || 0;
-  const cls = qty <= 0 ? 'empty' : qty <= 5 ? 'low' : 'ok';
   const center = document.getElementById('out-center')?.value;
+  const qty = typeof getStockQty === 'function'
+    ? getStockQty(center, product)
+    : ((getStockForCenter('out') || {})[product] || 0);
+  const cls = qty <= 0 ? 'empty' : qty <= 5 ? 'low' : 'ok';
   const unit = typeof getStockUnit === 'function' ? getStockUnit(center, product) : '';
 
   if (inlineBadge) {

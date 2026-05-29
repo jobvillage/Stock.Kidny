@@ -823,7 +823,9 @@ async function transferRequestItemsToCenter(requestId) {
   }
 
   for (const item of items) {
-    const availableQty = (localStock[sourceCenter] || {})[item.product] || 0;
+    const availableQty = typeof getStockQty === 'function'
+      ? getStockQty(sourceCenter, item.product)
+      : ((localStock[sourceCenter] || {})[item.product] || 0);
     if (item.qty > availableQty) {
       const unit = typeof getStockUnit === 'function' ? getStockUnit(sourceCenter, item.product) : '';
       showToast(`⚠️ ${item.product} (${sourceCenter}): จำนวนไม่พอ มี ${availableQty}${unit ? ` ${unit}` : ''}`, 'error');
@@ -1074,7 +1076,9 @@ async function completeStockRequest(requestId) {
   const stockCheck = Array.from(stockCheckMap.values()).reduce((result, item) => {
     if (!result.ok) return result;
 
-    const availableQty = (localStock[item.sourceCenter] || {})[item.product] || 0;
+    const availableQty = typeof getStockQty === 'function'
+      ? getStockQty(item.sourceCenter, item.product)
+      : ((localStock[item.sourceCenter] || {})[item.product] || 0);
     if (item.qty > availableQty) {
       return {
         ok: false,

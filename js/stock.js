@@ -32,15 +32,72 @@ function getStockUnit(center, product) {
   const unit = String(localStockUnits?.[center]?.[product] || '').trim();
   if (unit || !product) return unit;
 
-  const matchedCenter = Object.keys(localStockUnits || {})
-    .find((stockCenter) => localStockUnits?.[stockCenter]?.[product]);
+  const normalizedProduct = normalizeProductKey(product);
+  const normalizedUnitProduct = Object.keys(localStockUnits?.[center] || {})
+    .find((stockProduct) => normalizeProductKey(stockProduct) === normalizedProduct);
 
-  return matchedCenter ? String(localStockUnits[matchedCenter][product] || '').trim() : '';
+  if (normalizedUnitProduct) {
+    return String(localStockUnits[center][normalizedUnitProduct] || '').trim();
+  }
+
+  const matchedCenter = Object.keys(localStockUnits || {})
+    .find((stockCenter) => Object.keys(localStockUnits?.[stockCenter] || {})
+      .some((stockProduct) => normalizeProductKey(stockProduct) === normalizedProduct));
+
+  if (!matchedCenter) return '';
+
+  const matchedProduct = Object.keys(localStockUnits?.[matchedCenter] || {})
+    .find((stockProduct) => normalizeProductKey(stockProduct) === normalizedProduct);
+
+  return matchedProduct ? String(localStockUnits[matchedCenter][matchedProduct] || '').trim() : '';
 }
 
 function getStockQtyWithUnit(center, product, qty) {
   const unit = getStockUnit(center, product);
   return unit ? `${qty} ${unit}` : String(qty);
+}
+
+function normalizeProductKey(value) {
+  return String(value || '')
+    .normalize('NFC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function findStockProductKey(center, product) {
+  const stock = localStock?.[center] || {};
+  if (Object.prototype.hasOwnProperty.call(stock, product)) return product;
+
+  const normalizedProduct = normalizeProductKey(product);
+  return Object.keys(stock)
+    .find((stockProduct) => normalizeProductKey(stockProduct) === normalizedProduct)
+    || product;
+}
+
+function getStockWriteProductKey(center, product) {
+  const matchedProduct = findStockProductKey(center, product);
+  return Object.prototype.hasOwnProperty.call(localStock?.[center] || {}, matchedProduct)
+    ? matchedProduct
+    : product;
+}
+
+function getStockQty(center, product) {
+  const stockProduct = findStockProductKey(center, product);
+  return Number(localStock?.[center]?.[stockProduct] || 0);
+}
+
+function getPendingPoQty(product) {
+  if (Object.prototype.hasOwnProperty.call(pendingPoSummary || {}, product)) {
+    return Number(pendingPoSummary[product] || 0);
+  }
+
+  const normalizedProduct = normalizeProductKey(product);
+  const matchedProduct = Object.keys(pendingPoSummary || {})
+    .find((poProduct) => normalizeProductKey(poProduct) === normalizedProduct);
+
+  return matchedProduct ? Number(pendingPoSummary[matchedProduct] || 0) : 0;
 }
 
 function setInlineStockUnit(badge, unit) {
@@ -70,7 +127,14 @@ function getStockViewRule(center) {
 
 function getStockMinMax(center, product) {
   const rule = getStockViewRule(center);
-  const level = stockMinMaxFromSupabase?.[center]?.[product] || rule.levels?.[product] || {};
+  const normalizedProduct = normalizeProductKey(product);
+  const stockLevelProduct = Object.keys(stockMinMaxFromSupabase?.[center] || {})
+    .find((itemProduct) => normalizeProductKey(itemProduct) === normalizedProduct);
+  const ruleLevelProduct = Object.keys(rule.levels || {})
+    .find((itemProduct) => normalizeProductKey(itemProduct) === normalizedProduct);
+  const level = stockMinMaxFromSupabase?.[center]?.[stockLevelProduct]
+    || rule.levels?.[ruleLevelProduct]
+    || {};
   const min = Number(level.min);
   const max = Number(level.max);
 
@@ -81,10 +145,12 @@ function getStockMinMax(center, product) {
 }
 
 function getTransferTrendQty(center, product) {
+  const normalizedProduct = normalizeProductKey(product);
+
   return (stockViewTransfers || []).reduce((total, transfer) => {
     const items = normalizeItems(transfer.items);
     const qty = items
-      .filter((item) => item.product === product)
+      .filter((item) => normalizeProductKey(item.product) === normalizedProduct)
       .reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
 
     if (!qty) return total;
@@ -134,7 +200,8 @@ function getStockDashboardProducts(stockCenters, primaryCenter, selectedProduct)
     .sort((a, b) => a.localeCompare(b, 'th'));
 
   if (selectedProduct) {
-    productList = productList.filter((product) => product === selectedProduct);
+    const normalizedSelectedProduct = normalizeProductKey(selectedProduct);
+    productList = productList.filter((product) => normalizeProductKey(product) === normalizedSelectedProduct);
   }
 
   if (currentUser?.role === 'center_staff' && primaryCenter) {
@@ -212,8 +279,7 @@ function updateInlineStock(select) {
   }
 
   const center = document.getElementById('in-center')?.value;
-  const stock = getStockForCenter('in');
-  const qty = stock[product] || 0;
+  const qty = getStockQty(center, product);
   const unit = getStockUnit(center, product);
 
   valEl.textContent = qty;
@@ -233,8 +299,7 @@ function updateTransferStockInfo(select) {
   }
 
   const fromCenter = document.getElementById('transfer-from-center')?.value || 'ศูนย์ต้นทาง';
-  const stock = getTransferSourceStock();
-  const qty = stock[product] || 0;
+  const qty = getStockQty(fromCenter, product);
   const cls = qty <= 0 ? 'empty' : qty <= 5 ? 'low' : 'ok';
   const qtyText = getStockQtyWithUnit(fromCenter, product, qty);
 
@@ -335,8 +400,9 @@ function updateLocalStock(type, center, items) {
   if (!localStock[center]) localStock[center] = {};
 
   items.forEach(({ product, qty }) => {
-    const currentQty = localStock[center][product] || 0;
-    localStock[center][product] = type === 'in'
+    const stockProduct = getStockWriteProductKey(center, product);
+    const currentQty = Number(localStock[center][stockProduct] || 0);
+    localStock[center][stockProduct] = type === 'in'
       ? currentQty + qty
       : Math.max(0, currentQty - qty);
   });
@@ -412,7 +478,7 @@ function renderStockDashboard() {
           key: `stock-${primaryCenter}`,
           label: primaryCenter,
           className: primaryCenter === 'Hub Admin' ? 'stock-col-hub' : 'stock-col-main',
-          getValue: (product) => Number(localStock[primaryCenter]?.[product] || 0)
+          getValue: (product) => getStockQty(primaryCenter, product)
         },
         {
           key: 'min',
@@ -431,7 +497,7 @@ function renderStockDashboard() {
           label: 'สั่งสินค้า',
           className: 'stock-col-order',
           getValue: (product) => {
-            const currentQty = Number(localStock[primaryCenter]?.[product] || 0);
+            const currentQty = getStockQty(primaryCenter, product);
             return getStockOrderMessage(primaryCenter, product, currentQty);
           }
         },
@@ -442,7 +508,7 @@ function renderStockDashboard() {
           key: `stock-${center}`,
           label: center,
           className: center === 'Hub Admin' ? 'stock-col-hub' : 'stock-col-main',
-          getValue: (product) => Number(localStock[center]?.[product] || 0)
+          getValue: (product) => getStockQty(center, product)
         });
       });
     }
@@ -452,7 +518,7 @@ function renderStockDashboard() {
       key: 'po',
       label: 'เปิด PO',
       className: 'stock-col-po',
-      getValue: (product) => Number(pendingPoSummary?.[product] || 0)
+      getValue: (product) => getPendingPoQty(product)
     });
 
     const gridTemplate = `repeat(${columns.length}, minmax(120px, 1fr))`;
@@ -585,7 +651,7 @@ function getAutoPoItemsFromStockView() {
 
   const productList = getStockDashboardProducts(stockCenters, primaryCenter, selectedProduct);
   const items = productList.map((product) => {
-    const currentQty = Number(localStock[primaryCenter]?.[product] || 0);
+    const currentQty = getStockQty(primaryCenter, product);
     const qty = getAutoPoQty(primaryCenter, product, currentQty);
     return { product, qty };
   }).filter((item) => item.product && item.qty > 0);
@@ -779,8 +845,9 @@ function renderStockViewTransfers() {
   const filteredTransfers = stockViewTransfers
     .map((transfer) => {
       const items = normalizeItems(transfer.items);
+      const normalizedSelectedProduct = normalizeProductKey(selectedProduct);
       const filteredItems = selectedProduct
-        ? items.filter((item) => item.product === selectedProduct)
+        ? items.filter((item) => normalizeProductKey(item.product) === normalizedSelectedProduct)
         : items;
 
       return {
@@ -828,8 +895,6 @@ function renderHubStockDashboard() {
   const selectedProduct = document.getElementById('hub-product-filter')?.value || '';
   const productsToShow = selectedProduct ? [selectedProduct] : PRODUCTS;
 
-  const hubStock = localStock['Hub Admin'] || {};
-
   box.innerHTML = `
     <div class="hub-stock-table">
       <div class="hub-stock-head">
@@ -838,7 +903,7 @@ function renderHubStockDashboard() {
       </div>
 
       ${productsToShow.map((product) => {
-        const qty = Number(hubStock[product]) || 0;
+        const qty = getStockQty('Hub Admin', product);
         const statusClass = qty <= 0 ? 'empty' : qty <= 5 ? 'low' : 'ok';
 
         return `
