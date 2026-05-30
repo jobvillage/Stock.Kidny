@@ -52,6 +52,11 @@ function refreshStockProductFilter() {
 function enhanceStockProductFilter(select) {
   if (!select || select.tomselect || typeof TomSelect === 'undefined') return;
 
+  if (typeof shouldUseNativeSelectOnAndroid === 'function' && shouldUseNativeSelectOnAndroid()) {
+    select.classList.add('native-android-select');
+    return;
+  }
+
   const ts = new TomSelect(select, {
     create: false,
     allowEmptyOption: true,

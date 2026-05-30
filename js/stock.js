@@ -247,10 +247,6 @@ function getStockDashboardProducts(stockCenters, primaryCenter, selectedProduct)
 }
 
 function getStockDashboardCenters(selectedCenter) {
-  if (currentUser?.role === 'center_staff' && currentUser.center) {
-    return [currentUser.center];
-  }
-
   const stockCenters = getAllStockCenters();
   return selectedCenter
     ? stockCenters.filter((center) => center === selectedCenter)

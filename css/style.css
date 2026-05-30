@@ -330,6 +330,27 @@ button {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 12 12'%3E%3Cpath fill='%236c7484' d='M6 8.3 1.4 3.7a.7.7 0 0 1 1-1L6 6.3l3.6-3.6a.7.7 0 0 1 1 1z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.field-group select.native-android-select,
+.product-row select.native-android-select {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  background-image: none;
+  padding-right: 14px;
+}
+
+@media (pointer: coarse) {
+  .field-group select:not(.ts-hidden-accessible),
+  .product-row select:not(.ts-hidden-accessible) {
+    appearance: auto;
+    -webkit-appearance: menulist;
+    background-image: none;
+    padding-right: 14px;
+    touch-action: manipulation;
+  }
 }
 
 .field-group input:focus,

@@ -1103,7 +1103,7 @@ async function completeStockRequest(requestId) {
     const { data, error } = await supabaseClient.rpc('complete_stock_request', {
       p_request_id: requestId,
       p_staff_code: currentUser.code,
-      p_items: items,
+      p_items: allItems,
     });
 
     if (error) {

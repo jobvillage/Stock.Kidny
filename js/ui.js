@@ -253,6 +253,11 @@ function addProductRow(type) {
 function enhanceProductSelect(select) {
   if (!select || select.tomselect) return;
 
+  if (shouldUseNativeSelectOnAndroid()) {
+    select.classList.add('native-android-select');
+    return;
+  }
+
   const ts = new TomSelect(select, {
     create: false,
     allowEmptyOption: false,
@@ -265,6 +270,12 @@ function enhanceProductSelect(select) {
   });
 
   ts.control_input.setAttribute('placeholder', '— เลือกรายการสินค้า —');
+}
+
+function shouldUseNativeSelectOnAndroid() {
+  const isAndroid = /Android/i.test(navigator.userAgent || '');
+  const isTouch = window.matchMedia?.('(pointer: coarse)')?.matches || 'ontouchstart' in window;
+  return Boolean(isAndroid && isTouch);
 }
 
 function positionTomSelectDropdown(ts) {

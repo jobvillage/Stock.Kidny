@@ -308,6 +308,7 @@ function applyPermissionUI() {
     lockSelectToValue('out-center', currentUser.center);
     lockSelectToValue('transfer-from-center', currentUser.center);
     unlockSelect('stock-center-filter');
+    setStockCenterDefaultToOwnCenter();
     filterTransferTargetCenters();
   } else {
     unlockSelect('out-center');
@@ -316,6 +317,13 @@ function applyPermissionUI() {
     unlockSelect('stock-center-filter');
     filterTransferTargetCenters();
   }
+}
+
+function setStockCenterDefaultToOwnCenter() {
+  const select = document.getElementById('stock-center-filter');
+  if (!select || !currentUser?.center) return;
+
+  select.value = currentUser.center;
 }
 
 function lockSelectToValue(id, value) {
