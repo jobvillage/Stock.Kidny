@@ -301,14 +301,12 @@ function applyPermissionUI() {
     }
   }
 
-  const firstAllowedTab = currentUser.permissions[0] || 'in';
-  switchTab(firstAllowedTab, true);
-
   if (currentUser.role === 'center_staff') {
     lockSelectToValue('out-center', currentUser.center);
     lockSelectToValue('transfer-from-center', currentUser.center);
     unlockSelect('stock-center-filter');
     setStockCenterDefaultToOwnCenter();
+    setStaffRequestHistoryDefaultToOwnCenter();
     filterTransferTargetCenters();
   } else {
     unlockSelect('out-center');
@@ -317,10 +315,20 @@ function applyPermissionUI() {
     unlockSelect('stock-center-filter');
     filterTransferTargetCenters();
   }
+
+  const firstAllowedTab = currentUser.permissions[0] || 'in';
+  switchTab(firstAllowedTab, true);
 }
 
 function setStockCenterDefaultToOwnCenter() {
   const select = document.getElementById('stock-center-filter');
+  if (!select || !currentUser?.center) return;
+
+  select.value = currentUser.center;
+}
+
+function setStaffRequestHistoryDefaultToOwnCenter() {
+  const select = document.getElementById('staff-request-history-center');
   if (!select || !currentUser?.center) return;
 
   select.value = currentUser.center;

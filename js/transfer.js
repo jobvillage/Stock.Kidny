@@ -680,7 +680,7 @@ async function fetchStaffRequestHistory() {
       p_status: status,
       p_center: center,
       p_request_id: requestId,
-      p_staff_code: currentUser.code,
+      p_staff_code: '',
     });
 
     if (error) {
@@ -2952,6 +2952,11 @@ async function saveSinglePartialReceivePo(poId, button) {
 }
 
 async function fetchRequestStatus() {
+  if (currentUser?.role === 'center_staff' && typeof fetchStaffRequestHistory === 'function') {
+    await fetchStaffRequestHistory();
+    return;
+  }
+
   const box = document.getElementById('request-status-list');
   if (!box) return;
 
