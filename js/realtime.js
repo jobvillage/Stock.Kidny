@@ -5,7 +5,23 @@ function startRealtime() {
 
   if (!currentUser) return;
 
-  // Admin/adminR: ฟังใบเบิกรอจัดของ
+  const stockChannel = supabaseClient
+    .channel('stock-items-all')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'stock_items',
+      },
+      () => {
+        fetchStock();
+      }
+    )
+    .subscribe();
+
+  realtimeChannels.push(stockChannel);
+
   if (['admin', 'adminR', 'stock_receiver'].includes(currentUser.role)) {
     const requestChannel = supabaseClient
       .channel('stock-requests-pending')
@@ -24,27 +40,7 @@ function startRealtime() {
       .subscribe();
 
     realtimeChannels.push(requestChannel);
-
-    const stockChannel = supabaseClient
-      .channel('stock-items-admin')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'stock_items',
-          filter: 'center=in.(สต็อกใหญ่,Hub Admin,ไตบน,ไตล่าง,ไตดี)',
-        },
-        () => {
-          fetchStock();
-        }
-      )
-      .subscribe();
-
-    realtimeChannels.push(stockChannel);
   }
-
-  // Staff: ถ้าต้องการ realtime เฉพาะใบเบิกของตัวเอง ค่อยเปิดภายหลัง
 }
 
 function stopRealtime() {

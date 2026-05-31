@@ -416,6 +416,7 @@ async function submitStockInSupabase() {
 
     showToast('✅ บันทึกรับเข้าสำเร็จ', 'success');
 
+    await refreshAppDataAfterAction();
     formRequestIds.in = newRequestId('in');
     resetForm('in');
 
@@ -441,6 +442,18 @@ function updateLocalStock(type, center, items) {
   refreshInBadges();
   refreshOutInfo();
   refreshTransferInfo();
+
+  if (typeof renderStockDashboard === 'function') {
+    renderStockDashboard();
+  }
+
+  if (typeof renderHubStockDashboard === 'function') {
+    renderHubStockDashboard();
+  }
+
+  if (typeof saveStockCache === 'function') {
+    saveStockCache();
+  }
 }
 
 function resetForm(type) {

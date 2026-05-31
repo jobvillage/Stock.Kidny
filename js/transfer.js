@@ -8,7 +8,8 @@ async function submitTransfer() {
   const fromCenter = document.getElementById('transfer-from-center').value;
   const toCenter = document.getElementById('transfer-to-center').value;
   const note = document.getElementById('transfer-note').value.trim();
-  const requestId = formRequestIds.transfer;
+  const requestId = newRequestId('transfer');
+  formRequestIds.transfer = requestId;
   const convertFromProduct = document.getElementById('transfer-convert-from')?.value || '';
   const convertToProduct = document.getElementById('transfer-convert-to')?.value || '';
   const isProductConversion = Boolean(convertFromProduct || convertToProduct);
@@ -1052,7 +1053,7 @@ async function completeStockRequest(requestId) {
 
   const items = allItems.filter((item) => item.qty > 0);
 
-  if (items.length === 0 && allItems.length === 1) {
+  if (items.length === 0 && allItems.length > 0) {
     await cancelStockRequest(requestId, allItems);
     return;
   }
@@ -1692,6 +1693,73 @@ function formatPoQty(qty, unit = '') {
   return unit ? `${qtyText} ${unit}` : qtyText;
 }
 
+function getPoLineReceivedStates(po = {}) {
+  const requestedItems = Array.isArray(po.items) ? po.items : [];
+  const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
+  const states = requestedItems.map((item, index) => ({
+    ...item,
+    lineIndex: index,
+    product: item.product || '',
+    requestedQty: Number(item.qty) || 0,
+    receivedQty: 0,
+    remainingQty: Number(item.qty) || 0,
+  }));
+
+  const addReceivedToLine = (lineIndex, qty) => {
+    const state = states[lineIndex];
+    if (!state || qty <= 0) return qty;
+
+    const remaining = Math.max(0, state.requestedQty - state.receivedQty);
+    const usedQty = Math.min(remaining, qty);
+    state.receivedQty += usedQty;
+    state.remainingQty = Math.max(0, state.requestedQty - state.receivedQty);
+
+    return qty - usedQty;
+  };
+
+  const pendingReceived = [];
+
+  receivedItems.forEach((received) => {
+    const product = received.product || '';
+    const qty = Number(received.qty) || 0;
+    if (!product) return;
+
+    const lineIndexValue = received.line_index ?? received.lineIndex ?? received.po_line_index ?? received.poLineIndex;
+    const lineIndex = lineIndexValue === undefined || lineIndexValue === null || lineIndexValue === ''
+      ? -1
+      : Number(lineIndexValue);
+
+    if (Number.isInteger(lineIndex) && states[lineIndex]?.product === product) {
+      const overflowQty = addReceivedToLine(lineIndex, qty);
+      if (overflowQty > 0) pendingReceived.push({ product, qty: overflowQty });
+      return;
+    }
+
+    pendingReceived.push({ product, qty });
+  });
+
+  pendingReceived.forEach((received) => {
+    let remainingQty = received.qty;
+
+    const exactLine = states.findIndex((state) => (
+      state.product === received.product
+      && state.remainingQty > 0
+      && state.remainingQty === remainingQty
+    ));
+
+    if (exactLine >= 0) {
+      remainingQty = addReceivedToLine(exactLine, remainingQty);
+    }
+
+    states.forEach((state, index) => {
+      if (remainingQty <= 0 || state.product !== received.product || state.remainingQty <= 0) return;
+      remainingQty = addReceivedToLine(index, remainingQty);
+    });
+  });
+
+  return states;
+}
+
 function renderPoStatus(poList) {
   const box = document.getElementById('po-status-list');
   if (!box) return;
@@ -1716,18 +1784,15 @@ function renderPoStatus(poList) {
     const poCenter = getPoCenter(po);
 
     const items = Array.isArray(po.items) ? po.items : [];
-    const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
+    const receivedStates = getPoLineReceivedStates(po);
 
-    const itemList = items.map((item) => {
+    const itemList = items.map((item, index) => {
+      const receivedState = receivedStates[index] || {};
       const product = item.product || '';
-      const orderedQty = Number(item.qty) || 0;
+      const orderedQty = Number(receivedState.requestedQty ?? item.qty) || 0;
       const unit = getPoItemUnit(item, poCenter);
-
-      const receivedQty = receivedItems
-        .filter((received) => received.product === product)
-        .reduce((sum, received) => sum + (Number(received.qty) || 0), 0);
-
-      const remainingQty = Math.max(0, orderedQty - receivedQty);
+      const receivedQty = Number(receivedState.receivedQty) || 0;
+      const remainingQty = Number(receivedState.remainingQty ?? Math.max(0, orderedQty - receivedQty)) || 0;
       const isFullyReceived = orderedQty > 0 && receivedQty >= orderedQty;
       const isPartiallyReceived = receivedQty > 0 && remainingQty > 0;
 
@@ -2093,8 +2158,8 @@ function printPoDocument(poId) {
   }
 
   const items = Array.isArray(po.items) ? po.items : [];
-  const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
   const poCenter = getPoCenter(po);
+  const receivedStates = getPoLineReceivedStates(po);
 
   const statusText = po.status === 'received'
     ? 'รับเข้าแล้ว'
@@ -2103,14 +2168,11 @@ function printPoDocument(poId) {
       : 'รอรับสินค้า';
 
   const itemRows = items.map((item, index) => {
+    const receivedState = receivedStates[index] || {};
     const product = item.product || '';
-    const orderedQty = Number(item.qty) || 0;
-
-    const receivedQty = receivedItems
-      .filter((received) => received.product === product)
-      .reduce((sum, received) => sum + (Number(received.qty) || 0), 0);
-
-    const remainingQty = Math.max(0, orderedQty - receivedQty);
+    const orderedQty = Number(receivedState.requestedQty ?? item.qty) || 0;
+    const receivedQty = Number(receivedState.receivedQty) || 0;
+    const remainingQty = Number(receivedState.remainingQty ?? Math.max(0, orderedQty - receivedQty)) || 0;
 
     return `
       <tr>
@@ -2590,26 +2652,8 @@ function printCompletedRequestPickList(requestId) {
 }
 
 function getPoRemainingItems(po) {
-  const requestedItems = Array.isArray(po.items) ? po.items : [];
-  const receivedItems = Array.isArray(po.received_items) ? po.received_items : [];
-
-  return requestedItems.map((item) => {
-    const product = item.product || '';
-    const requestedQty = Number(item.qty) || 0;
-
-    const receivedQty = receivedItems
-      .filter((received) => received.product === product)
-      .reduce((sum, received) => sum + (Number(received.qty) || 0), 0);
-
-    const remainingQty = Math.max(0, requestedQty - receivedQty);
-
-    return {
-      product,
-      requestedQty,
-      receivedQty,
-      remainingQty,
-    };
-  }).filter((item) => item.product && item.remainingQty > 0);
+  return getPoLineReceivedStates(po)
+    .filter((item) => item.product && item.remainingQty > 0);
 }
 
 async function receivePoFull(poId) {
@@ -2623,6 +2667,8 @@ async function receivePoFull(poId) {
   const items = getPoRemainingItems(po).map((item) => ({
     product: item.product,
     qty: item.remainingQty,
+    lineIndex: item.lineIndex,
+    line_index: item.lineIndex,
     center: getPoCenter(po),
     stock_center: getPoCenter(po),
   }));
@@ -2695,6 +2741,7 @@ function openPartialReceivePo(poId) {
             data-requested-qty="${item.requestedQty}"
             data-received-qty="${item.receivedQty}"
             data-remaining-qty="${item.remainingQty}"
+            data-line-index="${item.lineIndex}"
             data-max="${item.remainingQty}"
           />
           </div>
@@ -2762,6 +2809,14 @@ async function savePartialReceivePo(poId) {
     if (qty > max) qty = max;
 
     return { product, qty };
+  }).map((item, index) => {
+    const input = inputs[index];
+    const lineIndex = Number(input?.dataset.lineIndex ?? -1);
+    return {
+      ...item,
+      lineIndex: Number.isInteger(lineIndex) && lineIndex >= 0 ? lineIndex : undefined,
+      line_index: Number.isInteger(lineIndex) && lineIndex >= 0 ? lineIndex : undefined,
+    };
   }).filter((item) => item.product && item.qty > 0);
 
   if (items.length === 0) {
@@ -2782,6 +2837,7 @@ async function receivePoItems(poId, items, options = {}) {
       product: item.product,
       qty: Number(item.qty || 0),
       remainingQty: Number(item.remainingQty || item.remaining_qty || 0),
+      lineIndex: item.lineIndex ?? item.line_index,
       center: item.center || item.stock_center || targetCenter,
     }))
     .filter((item) => item.product && item.qty > 0);
@@ -2812,6 +2868,8 @@ async function receivePoItems(poId, items, options = {}) {
       p_items: validItems.map((item) => ({
         product: item.product,
         qty: item.qty,
+        line_index: item.lineIndex,
+        lineIndex: item.lineIndex,
         center: item.center || targetCenter,
         stock_center: item.center || targetCenter,
       })),
@@ -2902,6 +2960,7 @@ async function saveSinglePartialReceivePo(poId, button) {
 
   const product = input.dataset.product || '';
   const remainingQty = Number(input.dataset.remainingQty || input.dataset.max || 0);
+  const lineIndex = Number(input.dataset.lineIndex ?? -1);
   let qty = Number(input.value) || 0;
 
   if (!product) {
@@ -2932,6 +2991,8 @@ async function saveSinglePartialReceivePo(poId, button) {
         product,
         qty,
         remainingQty,
+        lineIndex: Number.isInteger(lineIndex) && lineIndex >= 0 ? lineIndex : undefined,
+        line_index: Number.isInteger(lineIndex) && lineIndex >= 0 ? lineIndex : undefined,
       },
     ],
     {

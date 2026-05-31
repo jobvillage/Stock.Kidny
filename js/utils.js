@@ -66,6 +66,17 @@ function newRequestId(type) {
     prefix = 'PO';
   }
 
+  if (type === 'transfer') {
+    const timeText = [
+      String(now.getHours()).padStart(2, '0'),
+      String(now.getMinutes()).padStart(2, '0'),
+      String(now.getSeconds()).padStart(2, '0'),
+    ].join('');
+    const randomText = Math.random().toString(36).slice(2, 6).toUpperCase();
+
+    return `TRF-${dateText}-${timeText}-${randomText}`;
+  }
+
   const key = `stock_request_counter_${prefix}_${dateText}`;
   const current = Number(localStorage.getItem(key) || '0') + 1;
 
