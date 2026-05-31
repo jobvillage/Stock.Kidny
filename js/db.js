@@ -164,6 +164,9 @@ async function fetchPendingTransfers() {
       status: item.status,
       items: item.items || [],
       createdAt: item.created_at,
+      editedByCode: item.edited_by_code || '',
+      editedByName: item.edited_by_name || '',
+      editedAt: item.edited_at || null,
     }));
 
     if (!Object.keys(localStockUnits || {}).length) {

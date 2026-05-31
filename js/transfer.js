@@ -331,8 +331,17 @@ function renderPendingTransfers(errorMessage = '') {
   }
 
   box.innerHTML = pendingTransfers.map((request) => {
-    const isTaideeRequest = request.center === 'ไตดี';
-    const transferToTaideeButton = isTaideeRequest
+    const canRequestTransfer = Boolean(request.center);
+    const editRequestButton = `
+        <button
+          class="btn-po-edit request-edit-inline"
+          type="button"
+          onclick="enableStockRequestEdit('${escapeHtml(request.requestId || '')}')"
+        >
+          แก้ไข
+        </button>
+      `;
+    const transferToCenterButton = canRequestTransfer
       ? `
         <button
           class="btn-request-secondary request-transfer-inline"
@@ -341,6 +350,14 @@ function renderPendingTransfers(errorMessage = '') {
         >
           Transfer
         </button>
+      `
+      : '';
+    const requestEditedStamp = request.editedAt
+      ? `
+        <small class="request-edited-stamp">
+          แก้ไขรายการโดย ${escapeHtml(request.editedByName || request.editedByCode || '-')}
+          เมื่อ ${new Date(request.editedAt).toLocaleString('th-TH')}
+        </small>
       `
       : '';
 
@@ -355,12 +372,16 @@ function renderPendingTransfers(errorMessage = '') {
         || ''
       ).trim();
       const qtyText = unit ? `${qty} ${unit}` : String(qty);
+      const remainingQty = typeof getStockQty === 'function'
+        ? getStockQty(request.center, product)
+        : ((localStock[request.center] || {})[product] || 0);
+      const remainingText = unit ? `${remainingQty} ${unit}` : String(remainingQty);
 
       return `
         <div class="pick-item-row">
           <div class="pick-item-name">
             <strong>${escapeHtml(product)}</strong>
-            <small>จำนวนที่ขอ: ${escapeHtml(qtyText)}</small>
+            <small>จำนวนที่ขอ: ${escapeHtml(qtyText)} | คงเหลือ: ${escapeHtml(remainingText)}</small>
           </div>
 
           <div class="pick-item-source">
@@ -409,15 +430,17 @@ function renderPendingTransfers(errorMessage = '') {
     }).join('');
 
     return `
-      <article class="stock-request-card ${isTaideeRequest ? 'is-taidee-request' : ''}" data-request-id="${escapeHtml(request.requestId || '')}">
+      <article class="stock-request-card ${canRequestTransfer ? 'is-taidee-request' : ''}" data-request-id="${escapeHtml(request.requestId || '')}">
         <div class="stock-request-head">
           <div>
             <span class="overview-label">เลขใบเบิก</span>
             <strong>${escapeHtml(request.requestId || '-')}</strong>
           </div>
           <div class="request-head-actions">
+            ${editRequestButton}
             <span class="request-status-pill">รอดำเนินการ</span>
-            ${transferToTaideeButton}
+            ${transferToCenterButton}
+            ${requestEditedStamp}
           </div>
         </div>
 
@@ -443,7 +466,7 @@ function renderPendingTransfers(errorMessage = '') {
           </div>
         ` : ''}
 
-        ${isTaideeRequest ? `
+        ${canRequestTransfer ? `
           <div class="request-transfer-box" data-transfer-box="${escapeHtml(request.requestId || '')}" hidden>
             <div class="form-grid request-transfer-grid">
               <div class="field-group">
@@ -456,7 +479,7 @@ function renderPendingTransfers(errorMessage = '') {
               <div class="field-group">
                 <label for="request-transfer-to-${escapeHtml(request.requestId || '')}">ไปสต็อก</label>
                 <select id="request-transfer-to-${escapeHtml(request.requestId || '')}" class="request-transfer-to">
-                  ${renderPickLocationOptions('ไตดี')}
+                  ${renderPickLocationOptions(request.center || 'ไตดี')}
                 </select>
               </div>
             </div>
@@ -513,6 +536,176 @@ function renderPendingTransfers(errorMessage = '') {
       </article>
     `;
   }).join('');
+}
+
+function enableStockRequestEdit(requestId) {
+  const request = pendingTransfers.find((item) => item.requestId === requestId);
+  const card = document.querySelector(`[data-request-id="${CSS.escape(requestId)}"]`);
+
+  if (!request || !card) {
+    showToast('❌ ไม่พบใบขอเบิกนี้', 'error');
+    return;
+  }
+
+  if (card.querySelector('.request-edit-list')) {
+    showToast('กำลังอยู่ในโหมดแก้ไขแล้ว', 'error');
+    return;
+  }
+
+  const itemBox = card.querySelector('.po-items-table');
+  if (!itemBox) return;
+
+  const items = Array.isArray(request.items) ? request.items : [];
+  const editRows = items.map((item) => {
+    const product = item.product || '';
+    const qty = Number(item.qty) || 0;
+
+    return `
+      <div class="po-edit-row request-edit-row">
+        <select class="request-edit-product">
+          <option value=""></option>
+          ${PRODUCTS.map((p) => `
+            <option value="${escapeHtml(p)}" ${p === product ? 'selected' : ''}>
+              ${escapeHtml(p)}
+            </option>
+          `).join('')}
+        </select>
+
+        <input class="po-edit-qty request-edit-qty" type="number" min="1" value="${qty}" />
+
+        <button
+          class="btn-remove-row"
+          type="button"
+          onclick="this.closest('.request-edit-row').remove()"
+        >
+          ×
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  itemBox.innerHTML = `
+    <div class="po-items-head">
+      <div>สินค้า</div>
+      <div>จำนวน</div>
+      <div></div>
+    </div>
+
+    <div class="request-edit-list">
+      ${editRows}
+    </div>
+  `;
+
+  card.querySelectorAll('.request-edit-product').forEach((select) => {
+    if (typeof enhanceProductSelect === 'function') {
+      enhanceProductSelect(select);
+    }
+  });
+
+  card.querySelector('.request-edit-footer')?.remove();
+
+  const editFooter = document.createElement('div');
+  editFooter.className = 'po-edit-footer request-edit-footer';
+  editFooter.innerHTML = `
+    <button
+      class="btn-request-secondary"
+      type="button"
+      onclick="addStockRequestEditRow('${escapeHtml(requestId)}')"
+    >
+      + เพิ่มรายการ
+    </button>
+
+    <button
+      class="btn-request-secondary"
+      type="button"
+      onclick="fetchPendingTransfers()"
+    >
+      ยกเลิก
+    </button>
+
+    <button
+      class="btn-request-primary"
+      type="button"
+      onclick="saveStockRequestEdit('${escapeHtml(requestId)}')"
+    >
+      บันทึกแก้ไข
+    </button>
+  `;
+
+  const stockItems = card.querySelector('.stock-request-items');
+  if (stockItems) {
+    stockItems.insertAdjacentElement('afterend', editFooter);
+  } else {
+    card.appendChild(editFooter);
+  }
+}
+
+function addStockRequestEditRow(requestId) {
+  const card = document.querySelector(`[data-request-id="${CSS.escape(requestId)}"]`);
+  const list = card?.querySelector('.request-edit-list');
+  if (!list) return;
+
+  const row = document.createElement('div');
+  row.className = 'po-edit-row request-edit-row';
+  row.innerHTML = `
+    <select class="request-edit-product">
+      <option value=""></option>
+      ${getProductOptions()}
+    </select>
+
+    <input class="po-edit-qty request-edit-qty" type="number" min="1" placeholder="จำนวน" />
+
+    <button class="btn-remove-row" type="button" onclick="this.closest('.request-edit-row').remove()">×</button>
+  `;
+
+  list.appendChild(row);
+
+  const select = row.querySelector('.request-edit-product');
+  if (select && typeof enhanceProductSelect === 'function') {
+    enhanceProductSelect(select);
+  }
+}
+
+async function saveStockRequestEdit(requestId) {
+  const card = document.querySelector(`[data-request-id="${CSS.escape(requestId)}"]`);
+  if (!card) return;
+
+  const rows = card.querySelectorAll('.request-edit-row');
+  const items = Array.from(rows).map((row) => {
+    const product = row.querySelector('.request-edit-product')?.value || '';
+    const qty = Number(row.querySelector('.request-edit-qty')?.value) || 0;
+
+    return { product, qty };
+  }).filter((item) => item.product && item.qty > 0);
+
+  if (items.length === 0) {
+    showToast('⚠️ กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ', 'error');
+    return;
+  }
+
+  showToast('', 'loading', 'กำลังบันทึกการแก้ไขใบขอเบิก...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('update_stock_request_items', {
+      p_request_id: requestId,
+      p_staff_code: currentUser?.code || '',
+      p_staff_name: currentUser?.name || currentUser?.code || '',
+      p_items: items,
+    });
+
+    if (error) throw error;
+
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'แก้ไขใบขอเบิกไม่สำเร็จ');
+    }
+
+    showToast('✅ แก้ไขใบขอเบิกสำเร็จ', 'success');
+    await fetchPendingTransfers();
+
+  } catch (error) {
+    console.error('saveStockRequestEdit error:', error);
+    showToast(`❌ ${error.message || 'แก้ไขใบขอเบิกไม่สำเร็จ'}`, 'error');
+  }
 }
 
 function getRequestItemUnit(request, item) {
@@ -791,11 +984,6 @@ async function transferRequestItemsToCenter(requestId) {
   const sourceCenter = box?.querySelector('.request-transfer-from')?.value || '';
   const targetCenter = box?.querySelector('.request-transfer-to')?.value || request.center;
 
-  if (request.center !== 'ไตดี') {
-    showToast('⚠️ ปุ่ม Transfer ใช้เฉพาะใบขอเบิกศูนย์ไตดี', 'error');
-    return;
-  }
-
   if (!sourceCenter || !targetCenter) {
     showToast('⚠️ กรุณาเลือกสต็อกต้นทางและปลายทาง', 'error');
     return;
@@ -840,7 +1028,7 @@ async function transferRequestItemsToCenter(requestId) {
   const button = card.querySelector('.request-transfer-inline');
   if (button) button.disabled = true;
 
-  showToast('', 'loading', 'กำลัง Transfer ไปศูนย์ไตดี...');
+  showToast('', 'loading', `กำลัง Transfer ไป ${targetCenter}...`);
 
   try {
     const transferId = `${requestId}-AUTO-${Date.now()}`;
@@ -893,12 +1081,12 @@ async function transferRequestItemsToCenter(requestId) {
 
     card.remove();
 
-    showToast('✅ Transfer ไปพักที่ศูนย์ไตดีเรียบร้อย', 'success');
+    showToast(`✅ Transfer ไปพักที่ ${targetCenter} เรียบร้อย`, 'success');
     if (box) box.hidden = true;
 
   } catch (error) {
     console.error('transferRequestItemsToCenter error:', error);
-    showToast(`❌ ${error.message || 'Transfer ไปศูนย์ไตดีไม่สำเร็จ'}`, 'error');
+    showToast(`❌ ${error.message || 'Transfer ไปศูนย์ปลายทางไม่สำเร็จ'}`, 'error');
   } finally {
     if (button) button.disabled = false;
   }
