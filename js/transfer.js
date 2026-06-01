@@ -758,17 +758,17 @@ function renderRequestHistoryCards(requestList, options = {}) {
       ? 'รายการที่จัดเตรียมแล้ว'
       : 'รายการที่ขอเบิก';
     const requestId = request.request_id || request.requestId || '';
-    const printButton = isCompleted
-      ? `
+    const printButton = isCancelled
+      ? ''
+      : `
         <button
           class="btn-request-secondary request-print-inline"
           type="button"
-          onclick="printCompletedRequestPickList('${escapeHtml(requestId)}')"
+          onclick="${isCompleted ? 'printCompletedRequestPickList' : 'printStaffPendingRequest'}('${escapeHtml(requestId)}')"
         >
-          พิมพ์ใบเบิก
+          ${isCompleted ? 'พิมพ์ใบเบิก' : 'พิมพ์ใบขอเบิก'}
         </button>
-      `
-      : '';
+      `;
 
     return `
       <article class="stock-request-card">
@@ -1323,11 +1323,9 @@ function togglePreparedQtyEdit(button) {
   }
 
   let value = String(input.value || '').replace(/[^0-9]/g, '');
-  let max = Number(input.dataset.max) || 0;
   let num = Number(value || 0);
 
   if (num < 0) num = 0;
-  if (max > 0 && num > max) num = max;
 
   input.value = num;
   input.setAttribute('readonly', true);
@@ -2972,7 +2970,11 @@ function printCompletedRequestPickList(requestId) {
 }
 
 function printStaffPendingRequest(requestId) {
-  const request = (window.staffPendingRequestList || [])
+  const request = [
+    ...(window.staffPendingRequestList || []),
+    ...(window.currentRequestStatusList || []),
+    ...(window.adminRequestHistoryList || []),
+  ]
     .find((item) => (item.requestId || item.request_id) === requestId);
 
   if (!request) {
@@ -2995,12 +2997,16 @@ function printStaffPendingRequest(requestId) {
     `;
   }).join('');
 
+  const requestNo = request.requestId || request.request_id || '';
+  const requestDate = request.date || request.request_date || '';
+  const staffName = request.staffName || request.staff_name || request.staffCode || request.staff_code || '';
+
   const html = `
     <!DOCTYPE html>
     <html lang="th">
     <head>
       <meta charset="UTF-8">
-      <title>ใบขอเบิก ${escapeHtml(request.requestId || '')}</title>
+      <title>ใบขอเบิก ${escapeHtml(requestNo)}</title>
       <style>
         body { font-family: "Sarabun", Arial, sans-serif; padding: 24px; color: #111827; }
         .doc { max-width: 760px; margin: 0 auto; }
@@ -3022,10 +3028,10 @@ function printStaffPendingRequest(requestId) {
         <h1>ใบขอเบิกสินค้า</h1>
 
         <div class="meta">
-          <div><strong>เลขใบเบิก:</strong> ${escapeHtml(request.requestId || '-')}</div>
-          <div><strong>วันที่เบิก:</strong> ${escapeHtml(request.date || '-')}</div>
+          <div><strong>เลขใบเบิก:</strong> ${escapeHtml(requestNo || '-')}</div>
+          <div><strong>วันที่เบิก:</strong> ${escapeHtml(requestDate || '-')}</div>
           <div><strong>ศูนย์:</strong> ${escapeHtml(request.center || '-')}</div>
-          <div><strong>ผู้เบิก:</strong> ${escapeHtml(request.staffName || request.staffCode || '-')}</div>
+          <div><strong>ผู้เบิก:</strong> ${escapeHtml(staffName || '-')}</div>
           <div><strong>วันที่พิมพ์:</strong> ${new Date().toLocaleString('th-TH')}</div>
           <div><strong>สถานะ:</strong> รอแอดมินจัดของ</div>
         </div>

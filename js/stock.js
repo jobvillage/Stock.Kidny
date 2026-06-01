@@ -156,6 +156,22 @@ function setStockMinMaxFromSupabase(center, product, minQty, maxQty) {
   };
 }
 
+function getSupabaseStockMinMax(center, product) {
+  if (!center || !product) return { min: '', max: '' };
+
+  const normalizedProduct = normalizeProductKey(product);
+  const stockLevelProduct = Object.keys(stockMinMaxFromSupabase?.[center] || {})
+    .find((itemProduct) => normalizeProductKey(itemProduct) === normalizedProduct);
+  const level = stockMinMaxFromSupabase?.[center]?.[stockLevelProduct] || {};
+  const min = Number(level.min);
+  const max = Number(level.max);
+
+  return {
+    min: Number.isFinite(min) && min > 0 ? min : '',
+    max: Number.isFinite(max) && max > 0 ? max : '',
+  };
+}
+
 function getStockViewRule(center) {
   return STOCK_VIEW_RULES[center] || { products: [], levels: {} };
 }

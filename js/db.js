@@ -268,14 +268,20 @@ function getStockRequestItemsWithoutMin(center, items) {
     const productType = typeof getStockProductType === 'function'
       ? getStockProductType(center, item.product)
       : '';
+    const normalizedType = typeof normalizeProductKey === 'function'
+      ? normalizeProductKey(productType)
+      : String(productType || '').trim();
+    const normalizedDialysisType = typeof normalizeProductKey === 'function'
+      ? normalizeProductKey('น้ำยาฟอกไต')
+      : 'น้ำยาฟอกไต';
     const isDialysisFluid = typeof normalizeProductKey === 'function'
-      ? normalizeProductKey(productType) === normalizeProductKey('น้ำยาฟอกไต')
+      ? normalizedType.includes(normalizedDialysisType)
       : String(productType || '').trim() === 'น้ำยาฟอกไต';
 
     if (!isDialysisFluid) return false;
 
-    const minMax = typeof getStockMinMax === 'function'
-      ? getStockMinMax(center, item.product)
+    const minMax = typeof getSupabaseStockMinMax === 'function'
+      ? getSupabaseStockMinMax(center, item.product)
       : {};
     const minQty = Number(minMax?.min);
 
@@ -316,6 +322,21 @@ async function submitStockOutSupabase() {
   }
 
   if (currentUser.role === 'center_staff') {
+    btn.disabled = true;
+    showToast('', 'loading', 'กำลังตรวจสอบ Min ของสินค้า...');
+
+    try {
+      if (typeof fetchFreshStock === 'function') {
+        await fetchFreshStock();
+      } else if (typeof fetchStock === 'function') {
+        await fetchStock();
+      }
+    } catch (error) {
+      btn.disabled = false;
+      showToast(`❌ ${error.message || 'โหลดข้อมูล Min ไม่สำเร็จ'}`, 'error');
+      return;
+    }
+
     const itemsWithoutMin = getStockRequestItemsWithoutMin(center, items);
 
     if (itemsWithoutMin.length > 0) {
@@ -328,6 +349,7 @@ async function submitStockOutSupabase() {
         `⚠️ ${productNames} ยังไม่ได้กำหนด Min ในสต็อก ${center} กรุณาแจ้งแอดมินก่อนเบิก`,
         'error'
       );
+      btn.disabled = false;
       return;
     }
   }

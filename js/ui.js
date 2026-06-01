@@ -146,6 +146,33 @@ function showToast(msg, type = 'success', label = '') {
   }
 }
 
+function warnPieceUnitRequestItem(select) {
+  const row = select?.closest('.product-row');
+  const product = select?.value || '';
+  if (!row || !product) return;
+
+  const center = document.getElementById('out-center')?.value || '';
+  const unit = typeof getStockUnit === 'function' ? getStockUnit(center, product) : '';
+  const normalizedUnit = typeof normalizeProductKey === 'function'
+    ? normalizeProductKey(unit)
+    : String(unit || '').trim();
+  const normalizedPieceUnit = typeof normalizeProductKey === 'function'
+    ? normalizeProductKey('ชิ้น')
+    : 'ชิ้น';
+
+  if (!normalizedUnit.includes(normalizedPieceUnit)) {
+    row.dataset.pieceUnitWarnedProduct = '';
+    return;
+  }
+
+  if (row.dataset.pieceUnitWarnedProduct === product) return;
+  row.dataset.pieceUnitWarnedProduct = product;
+
+  window.setTimeout(() => {
+    window.alert(`รายการ "${product}" มีหน่วยเป็นชิ้น\nกรุณาใส่จำนวนเป็นชิ้น ไม่ใช่จำนวนลัง`);
+  }, 0);
+}
+
 function getProductOptions() {
   return PRODUCTS.map((product) => `<option value="${escapeHtml(product)}">${escapeHtml(product)}</option>`).join('');
 }
@@ -211,6 +238,7 @@ function addProductRow(type) {
 
     productSelect.addEventListener('change', (event) => {
       updateStockInfo(event.currentTarget);
+      warnPieceUnitRequestItem(event.currentTarget);
     });
 
     row.querySelector('.btn-remove-row').addEventListener('click', (event) => removeRow(event.currentTarget));
