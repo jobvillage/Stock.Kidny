@@ -15,7 +15,11 @@ function startRealtime() {
         table: 'stock_items',
       },
       () => {
-        fetchStock();
+        if (typeof fetchFreshStock === 'function') {
+          fetchFreshStock();
+        } else {
+          fetchStock();
+        }
       }
     )
     .subscribe();

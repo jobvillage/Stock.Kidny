@@ -207,8 +207,12 @@ function bindStaticEvents() {
     renderStockDashboard();
   });
 
-  document.getElementById('btn-refresh-hub-stock')?.addEventListener('click', () => {
-    fetchStock();
+  document.getElementById('btn-refresh-hub-stock')?.addEventListener('click', async () => {
+    if (typeof fetchFreshStock === 'function') {
+      await fetchFreshStock();
+    } else {
+      await fetchStock();
+    }
     renderHubStockDashboard();
   });
 

@@ -128,12 +128,18 @@ async function submitTransfer() {
     formRequestIds.transfer = newRequestId('transfer');
     resetTransferForm();
 
-    if (canAccessTab('pending')) {
-      fetchPendingTransfers();
-    }
+    if (typeof refreshAppDataAfterAction === 'function') {
+      await refreshAppDataAfterAction();
+    } else {
+      if (canAccessTab('pending')) {
+        await fetchPendingTransfers();
+      }
 
-    if (typeof fetchStock === 'function') {
-      fetchStock();
+      if (typeof fetchFreshStock === 'function') {
+        await fetchFreshStock();
+      } else if (typeof fetchStock === 'function') {
+        await fetchStock();
+      }
     }
 
   } catch (error) {
@@ -822,6 +828,125 @@ function renderRequestHistoryCards(requestList, options = {}) {
   }).join('');
 }
 
+async function fetchStaffPendingRequests() {
+  if (!currentUser || currentUser.role !== 'center_staff') return;
+
+  const box = document.getElementById('staff-pending-requests');
+  if (!box) return;
+
+  box.innerHTML = '<div class="empty-state">กำลังโหลดใบขอเบิกที่รอแอดมินจัดของ...</div>';
+
+  try {
+    const { data, error } = await supabaseClient.rpc('get_pending_stock_requests');
+
+    if (error) throw error;
+
+    const ownRequests = (data || [])
+      .filter((item) => item.staff_code === currentUser.code)
+      .map((item) => ({
+        requestId: item.request_id,
+        date: item.request_date,
+        center: item.center,
+        staffCode: item.staff_code || '',
+        staffName: item.staff_name || '',
+        note: item.note || '',
+        status: item.status,
+        items: item.items || [],
+        createdAt: item.created_at,
+      }));
+
+    window.staffPendingRequestList = ownRequests;
+    renderStaffPendingRequests(ownRequests);
+
+  } catch (error) {
+    console.error('fetchStaffPendingRequests error:', error);
+    box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลดใบขอเบิกที่รอแอดมินจัดของไม่สำเร็จ')}</div>`;
+  }
+}
+
+function renderStaffPendingRequests(requestList) {
+  const box = document.getElementById('staff-pending-requests');
+  if (!box) return;
+
+  if (!requestList.length) {
+    box.innerHTML = '<div class="empty-state">ยังไม่มีใบขอเบิกที่รอแอดมินจัดของ</div>';
+    return;
+  }
+
+  box.innerHTML = requestList.map((request) => {
+    const requestId = request.requestId || request.request_id || '';
+    const itemRows = (request.items || []).map((item) => {
+      const unit = getRequestItemUnit(request, item);
+
+      return `
+        <div class="po-item-row">
+          <div class="po-item-name">${escapeHtml(item.product || '-')}</div>
+          <div class="po-item-qty">${Number(item.qty) || 0}</div>
+          <div class="po-item-unit">${escapeHtml(unit)}</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <article class="stock-request-card">
+        <div class="stock-request-head">
+          <div>
+            <span class="overview-label">เลขใบเบิก</span>
+            <strong>${escapeHtml(requestId || '-')}</strong>
+          </div>
+
+          <div class="request-head-actions">
+            <span class="overview-pill">รอแอดมินจัดของ</span>
+            <button
+              class="btn-request-secondary request-print-inline"
+              type="button"
+              onclick="printStaffPendingRequest('${escapeHtml(requestId)}')"
+            >
+              พิมพ์ใบขอเบิก
+            </button>
+          </div>
+        </div>
+
+        <div class="stock-request-meta">
+          <div>
+            <span>วันที่เบิก</span>
+            <strong>${escapeHtml(request.date || request.request_date || '-')}</strong>
+          </div>
+          <div>
+            <span>ศูนย์</span>
+            <strong>${escapeHtml(request.center || '-')}</strong>
+          </div>
+          <div>
+            <span>ผู้เบิก</span>
+            <strong>${escapeHtml(request.staffName || request.staffCode || '-')}</strong>
+          </div>
+        </div>
+
+        ${request.note ? `
+          <div class="stock-request-note">
+            <span>หมายเหตุ</span>
+            <p>${escapeHtml(request.note)}</p>
+          </div>
+        ` : ''}
+
+        <div class="stock-request-items">
+          <div class="stock-request-section-title">รายการที่ขอเบิก</div>
+
+          <div class="po-items-table">
+            <div class="po-items-head">
+              <div>สินค้า</div>
+              <div>จำนวน</div>
+              <div>หน่วย</div>
+            </div>
+
+            ${itemRows}
+          </div>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
 async function fetchAdminRequestHistory() {
   if (!currentUser || !['admin', 'adminR', 'stock_receiver'].includes(currentUser.role)) return;
 
@@ -1069,7 +1194,9 @@ async function transferRequestItemsToCenter(requestId) {
     });
     setRequestTransferMode(card, true);
 
-    if (typeof fetchStock === 'function') {
+    if (typeof fetchFreshStock === 'function') {
+      await fetchFreshStock();
+    } else if (typeof fetchStock === 'function') {
       await fetchStock();
     }
 
@@ -1305,8 +1432,13 @@ async function completeStockRequest(requestId) {
 
     showToast('✅ จัดของและตัดสต็อกสำเร็จ', 'success');
 
-    fetchStock();
-    fetchPendingTransfers();
+    if (typeof fetchFreshStock === 'function') {
+      await fetchFreshStock();
+    } else if (typeof fetchStock === 'function') {
+      await fetchStock();
+    }
+
+    await fetchPendingTransfers();
 
   } catch (error) {
     console.error('complete_stock_request error:', error);
@@ -2839,6 +2971,106 @@ function printCompletedRequestPickList(requestId) {
   printWindow.document.close();
 }
 
+function printStaffPendingRequest(requestId) {
+  const request = (window.staffPendingRequestList || [])
+    .find((item) => (item.requestId || item.request_id) === requestId);
+
+  if (!request) {
+    showToast('❌ ไม่พบใบขอเบิกนี้', 'error');
+    return;
+  }
+
+  const items = Array.isArray(request.items) ? request.items : [];
+  const itemRows = items.map((item, index) => {
+    const unit = getRequestItemUnit(request, item);
+
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(item.product || '-')}</td>
+        <td class="num">${Number(item.qty) || 0}</td>
+        <td>${escapeHtml(unit)}</td>
+        <td></td>
+      </tr>
+    `;
+  }).join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+      <meta charset="UTF-8">
+      <title>ใบขอเบิก ${escapeHtml(request.requestId || '')}</title>
+      <style>
+        body { font-family: "Sarabun", Arial, sans-serif; padding: 24px; color: #111827; }
+        .doc { max-width: 760px; margin: 0 auto; }
+        h1 { text-align: center; font-size: 24px; margin: 0 0 20px; }
+        .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin-bottom: 18px; font-size: 14px; }
+        .meta div { border-bottom: 1px solid #d1d5db; padding: 6px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+        th, td { border: 1px solid #d1d5db; padding: 8px; }
+        th { background: #f3f4f6; text-align: center; }
+        .num { text-align: center; font-weight: 700; }
+        .note { margin-top: 14px; border: 1px solid #d1d5db; padding: 10px; font-size: 14px; }
+        .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 52px; text-align: center; font-size: 14px; }
+        .line { border-top: 1px solid #111827; padding-top: 8px; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      <div class="doc">
+        <h1>ใบขอเบิกสินค้า</h1>
+
+        <div class="meta">
+          <div><strong>เลขใบเบิก:</strong> ${escapeHtml(request.requestId || '-')}</div>
+          <div><strong>วันที่เบิก:</strong> ${escapeHtml(request.date || '-')}</div>
+          <div><strong>ศูนย์:</strong> ${escapeHtml(request.center || '-')}</div>
+          <div><strong>ผู้เบิก:</strong> ${escapeHtml(request.staffName || request.staffCode || '-')}</div>
+          <div><strong>วันที่พิมพ์:</strong> ${new Date().toLocaleString('th-TH')}</div>
+          <div><strong>สถานะ:</strong> รอแอดมินจัดของ</div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 46px;">ลำดับ</th>
+              <th>รายการสินค้า</th>
+              <th style="width: 90px;">จำนวน</th>
+              <th style="width: 90px;">หน่วย</th>
+              <th style="width: 120px;">หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        ${request.note ? `<div class="note"><strong>หมายเหตุ:</strong> ${escapeHtml(request.note)}</div>` : ''}
+
+        <div class="signatures">
+          <div><div class="line">ผู้เบิก</div></div>
+          <div><div class="line">ผู้อนุมัติ / ผู้จัดของ</div></div>
+        </div>
+      </div>
+
+      <script>
+        window.onload = function () {
+          window.print();
+        };
+      </script>
+    </body>
+    </html>
+  `;
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ใบขอเบิก', 'error');
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
 function getPoRemainingItems(po) {
   return getPoLineReceivedStates(po)
     .filter((item) => item.product && item.remainingQty > 0);
@@ -3084,7 +3316,11 @@ async function receivePoItems(poId, items, options = {}) {
       await fetchPoStatus();
     }
 
-    await fetchStock();
+    if (typeof fetchFreshStock === 'function') {
+      await fetchFreshStock();
+    } else {
+      await fetchStock();
+    }
     fetchPendingPoSummary?.();
 
     return data;
@@ -3202,6 +3438,9 @@ async function saveSinglePartialReceivePo(poId, button) {
 
 async function fetchRequestStatus() {
   if (currentUser?.role === 'center_staff' && typeof fetchStaffRequestHistory === 'function') {
+    if (typeof fetchStaffPendingRequests === 'function') {
+      await fetchStaffPendingRequests();
+    }
     await fetchStaffRequestHistory();
     return;
   }

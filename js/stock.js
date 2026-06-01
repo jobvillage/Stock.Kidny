@@ -451,9 +451,7 @@ function updateLocalStock(type, center, items) {
     renderHubStockDashboard();
   }
 
-  if (typeof saveStockCache === 'function') {
-    saveStockCache();
-  }
+  // Do not persist optimistic local changes. Supabase fetch is the source of truth.
 }
 
 function resetForm(type) {
@@ -666,7 +664,9 @@ async function refreshStockViewOnly() {
   if (button) button.disabled = true;
 
   try {
-    if (typeof fetchStock === 'function') {
+    if (typeof fetchFreshStock === 'function') {
+      await fetchFreshStock();
+    } else if (typeof fetchStock === 'function') {
       await fetchStock();
     }
 

@@ -5,6 +5,15 @@ let pendingTransfers = [];
 let stockViewTransfers = [];
 
 const DB_STOCK_CACHE_KEY = 'stock_cache_v1';
+const DB_STOCK_CACHE_MAX_AGE_MS = 60 * 1000;
+
+function clearStockCache() {
+  try {
+    localStorage.removeItem(DB_STOCK_CACHE_KEY);
+  } catch (error) {
+    console.warn('Clear stock cache failed:', error);
+  }
+}
 
 function saveStockCache() {
   try {
@@ -27,6 +36,12 @@ function loadStockCache() {
     const data = JSON.parse(cached);
     if (!data.stock) return false;
 
+    const savedAt = data.savedAt ? new Date(data.savedAt).getTime() : 0;
+    if (!savedAt || Date.now() - savedAt > DB_STOCK_CACHE_MAX_AGE_MS) {
+      clearStockCache();
+      return false;
+    }
+
     localStock = data.stock;
     localStockUnits = data.units || {};
     localStockTypes = data.types || {};
@@ -41,6 +56,11 @@ function loadStockCache() {
     console.warn('Load stock cache failed:', error);
     return false;
   }
+}
+
+async function fetchFreshStock() {
+  clearStockCache();
+  return fetchStock();
 }
 
 async function fetchStockUnitsFromTable() {
@@ -215,7 +235,7 @@ async function getNextStockRequestIdFromSupabase() {
 async function refreshAppDataAfterAction() {
   try {
     if (typeof fetchStock === 'function') {
-      await fetchStock();
+      await fetchFreshStock();
     }
 
     if (typeof fetchPendingTransfers === 'function') {
@@ -238,6 +258,29 @@ async function refreshAppDataAfterAction() {
   } catch (error) {
     console.warn('refreshAppDataAfterAction error:', error);
   }
+}
+
+function getStockRequestItemsWithoutMin(center, items) {
+  if (!center || !Array.isArray(items)) return [];
+
+  return items.filter((item) => {
+    if (!item?.product) return false;
+    const productType = typeof getStockProductType === 'function'
+      ? getStockProductType(center, item.product)
+      : '';
+    const isDialysisFluid = typeof normalizeProductKey === 'function'
+      ? normalizeProductKey(productType) === normalizeProductKey('น้ำยาฟอกไต')
+      : String(productType || '').trim() === 'น้ำยาฟอกไต';
+
+    if (!isDialysisFluid) return false;
+
+    const minMax = typeof getStockMinMax === 'function'
+      ? getStockMinMax(center, item.product)
+      : {};
+    const minQty = Number(minMax?.min);
+
+    return !Number.isFinite(minQty) || minQty <= 0;
+  });
 }
 
 async function submitStockOutSupabase() {
@@ -270,6 +313,23 @@ async function submitStockOutSupabase() {
   if (items.length === 0) {
     showToast('⚠️ กรุณาเพิ่มรายการสินค้าเบิกออก', 'error');
     return;
+  }
+
+  if (currentUser.role === 'center_staff') {
+    const itemsWithoutMin = getStockRequestItemsWithoutMin(center, items);
+
+    if (itemsWithoutMin.length > 0) {
+      const productNames = itemsWithoutMin
+        .map((item) => item.product)
+        .filter(Boolean)
+        .join(', ');
+
+      showToast(
+        `⚠️ ${productNames} ยังไม่ได้กำหนด Min ในสต็อก ${center} กรุณาแจ้งแอดมินก่อนเบิก`,
+        'error'
+      );
+      return;
+    }
   }
 
   btn.disabled = true;

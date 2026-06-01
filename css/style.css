@@ -1886,6 +1886,32 @@ button {
   text-align: right;
 }
 
+.staff-pending-section {
+  margin: 22px 0 24px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(74, 144, 226, 0.06);
+}
+
+.staff-pending-heading {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.staff-pending-heading span {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.staff-pending-heading small {
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .request-transfer-box {
   margin: 14px 0;
   padding: 14px;
