@@ -736,6 +736,26 @@ function getRequestItemSourceCenter(item = {}) {
   ).trim();
 }
 
+function isRequestTransferPreparedItem(item = {}) {
+  return Boolean(
+    item.request_transfer === true
+    || item.requestTransfer === true
+    || item.transfer_from_center
+    || item.transferFromCenter
+  );
+}
+
+function getRequestItemTransferFromCenter(item = {}) {
+  return String(
+    item.transfer_from_center
+    || item.transferFromCenter
+    || item.from_center
+    || item.fromCenter
+    || getRequestItemSourceCenter(item)
+    || ''
+  ).trim();
+}
+
 function renderRequestHistoryCards(requestList, options = {}) {
   if (!requestList.length) {
     return `<div class="empty-state">${escapeHtml(options.emptyText || 'ไม่พบใบเบิกย้อนหลัง')}</div>`;
@@ -747,11 +767,15 @@ function renderRequestHistoryCards(requestList, options = {}) {
     const items = Array.isArray(request.prepared_items) && request.prepared_items.length
       ? request.prepared_items
       : request.items || [];
+    const isTransferCompleted = isCompleted && items.some((item) => isRequestTransferPreparedItem(item));
+    const sourceColumnHead = isTransferCompleted ? 'โอนจากสต็อก' : 'ตัดสต็อกที่';
 
     const itemRows = items.map((item) => {
       const unit = getRequestItemUnit(request, item);
       const qty = Number(item.qty) || 0;
-      const sourceCenter = isCompleted ? getRequestItemSourceCenter(item) : '';
+      const sourceCenter = isCompleted
+        ? (isTransferCompleted ? getRequestItemTransferFromCenter(item) : getRequestItemSourceCenter(item))
+        : '';
 
       return `
         <div class="po-item-row">
@@ -832,7 +856,7 @@ function renderRequestHistoryCards(requestList, options = {}) {
           <div class="po-items-table ${isCompleted ? 'has-source-location' : ''}">
             <div class="po-items-head">
               <div>สินค้า</div>
-              ${isCompleted ? '<div>ตัดสต็อกที่</div>' : ''}
+              ${isCompleted ? `<div>${escapeHtml(sourceColumnHead)}</div>` : ''}
               <div>จำนวน</div>
               <div>หน่วย</div>
             </div>
@@ -1197,6 +1221,12 @@ async function transferRequestItemsToCenter(requestId) {
 
     const preparedItems = items.map((item) => ({
       ...item,
+      request_transfer: true,
+      requestTransfer: true,
+      transfer_from_center: sourceCenter,
+      transferFromCenter: sourceCenter,
+      transfer_to_center: targetCenter,
+      transferToCenter: targetCenter,
       source_center: targetCenter,
       sourceCenter: targetCenter,
       stock_center: targetCenter,
