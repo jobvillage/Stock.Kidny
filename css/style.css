@@ -2400,6 +2400,17 @@ button {
   text-align: center;
 }
 
+.po-items-table.has-source-location .po-items-head,
+.po-items-table.has-source-location .po-item-row {
+  grid-template-columns: minmax(0, 1fr) 116px 76px 72px;
+}
+
+.po-items-table.has-source-location .po-items-head div:nth-child(2),
+.po-items-table.has-source-location .po-items-head div:nth-child(4),
+.po-items-table.has-source-location .po-item-source-location {
+  text-align: center;
+}
+
 .po-items-head {
   background: rgba(23, 32, 51, 0.06);
   color: var(--text-muted);
@@ -2423,6 +2434,12 @@ button {
   color: var(--text);
 }
 
+.po-item-source-location {
+  color: #a8b1c2;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .po-item-unit {
   text-align: center;
   color: var(--text-muted);
@@ -2436,6 +2453,15 @@ button {
     gap: 4px;
     padding: 9px 8px;
     font-size: 13px;
+  }
+
+  .po-items-table.has-source-location .po-items-head,
+  .po-items-table.has-source-location .po-item-row {
+    grid-template-columns: minmax(0, 1fr) 88px 54px 50px;
+  }
+
+  .po-items-table.has-source-location .po-item-source-location {
+    font-size: 10px;
   }
 }
 

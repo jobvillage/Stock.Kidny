@@ -725,30 +725,46 @@ function getRequestItemUnit(request, item) {
   ).trim();
 }
 
+function getRequestItemSourceCenter(item = {}) {
+  return String(
+    item.source_center
+    || item.sourceCenter
+    || item.stock_center
+    || item.stockCenter
+    || item.center
+    || ''
+  ).trim();
+}
+
 function renderRequestHistoryCards(requestList, options = {}) {
   if (!requestList.length) {
     return `<div class="empty-state">${escapeHtml(options.emptyText || 'ไม่พบใบเบิกย้อนหลัง')}</div>`;
   }
 
   return requestList.map((request) => {
+    const isCompleted = request.status === 'completed';
+    const isCancelled = request.status === 'cancelled';
     const items = Array.isArray(request.prepared_items) && request.prepared_items.length
       ? request.prepared_items
       : request.items || [];
 
     const itemRows = items.map((item) => {
       const unit = getRequestItemUnit(request, item);
+      const qty = Number(item.qty) || 0;
+      const sourceCenter = isCompleted ? getRequestItemSourceCenter(item) : '';
 
       return `
         <div class="po-item-row">
           <div class="po-item-name">${escapeHtml(item.product || '-')}</div>
-          <div class="po-item-qty">${Number(item.qty) || 0}</div>
+          ${isCompleted ? `
+            <div class="po-item-source-location">${escapeHtml(sourceCenter || '—')}</div>
+          ` : ''}
+          <div class="po-item-qty">${qty}</div>
           <div class="po-item-unit">${escapeHtml(unit)}</div>
         </div>
       `;
     }).join('');
 
-    const isCompleted = request.status === 'completed';
-    const isCancelled = request.status === 'cancelled';
     const statusText = isCancelled
       ? 'ใบเบิกนี้ถูกยกเลิก'
       : isCompleted
@@ -813,9 +829,10 @@ function renderRequestHistoryCards(requestList, options = {}) {
             ${escapeHtml(sectionTitle)}
           </div>
 
-          <div class="po-items-table">
+          <div class="po-items-table ${isCompleted ? 'has-source-location' : ''}">
             <div class="po-items-head">
               <div>สินค้า</div>
+              ${isCompleted ? '<div>ตัดสต็อกที่</div>' : ''}
               <div>จำนวน</div>
               <div>หน่วย</div>
             </div>
@@ -1829,31 +1846,46 @@ async function submitPoCmo() {
   showToast('', 'loading', 'กำลังบันทึกรายการเปิด PO...');
 
   try {
-    const createPoParams = {
-      p_client_request_id: newRequestId('po'),
-      p_staff_code: currentUser?.code || '',
-      p_date: date,
-      p_person: person,
-      p_center: center,
-      p_note: note,
-      p_items: items,
-    };
+    let data = null;
+    let error = null;
 
-    let { data, error } = await supabaseClient.rpc('create_po_cmo', createPoParams);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const createPoParams = {
+        p_client_request_id: newRequestId('po'),
+        p_staff_code: currentUser?.code || '',
+        p_date: date,
+        p_person: person,
+        p_center: center,
+        p_note: note,
+        p_items: items,
+      };
 
-    if (error && isRpcSignatureError(error)) {
-      const { p_center, ...fallbackParams } = createPoParams;
-      const fallback = await supabaseClient.rpc('create_po_cmo', fallbackParams);
-      data = fallback.data;
-      error = fallback.error;
-    }
+      const result = await supabaseClient.rpc('create_po_cmo', createPoParams);
+      data = result.data;
+      error = result.error;
 
-    if (error) {
-      throw error;
+      if (error && isRpcSignatureError(error)) {
+        const { p_center, ...fallbackParams } = createPoParams;
+        const fallback = await supabaseClient.rpc('create_po_cmo', fallbackParams);
+        data = fallback.data;
+        error = fallback.error;
+      }
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.duplicate !== true) {
+        break;
+      }
     }
 
     if (!data || data.success !== true) {
       throw new Error(data?.message || 'บันทึก PO ไม่สำเร็จ');
+    }
+
+    if (data.duplicate === true) {
+      throw new Error('เลข PO ซ้ำกับรายการเดิม กรุณากดบันทึกใหม่อีกครั้ง');
     }
 
     showToast(`✅ บันทึก PO สำเร็จ: ${data.po_id || ''}`, 'success');
