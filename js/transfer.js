@@ -725,6 +725,18 @@ function getRequestItemUnit(request, item) {
   ).trim();
 }
 
+function getRequestStaffDisplay(request = {}) {
+  return String(
+    request.staffName
+    || request.staff_name
+    || request.requester_name
+    || request.requesterName
+    || request.staffCode
+    || request.staff_code
+    || ''
+  ).trim();
+}
+
 function getRequestItemSourceCenter(item = {}) {
   return String(
     item.source_center
@@ -764,6 +776,7 @@ function renderRequestHistoryCards(requestList, options = {}) {
   return requestList.map((request) => {
     const isCompleted = request.status === 'completed';
     const isCancelled = request.status === 'cancelled';
+    const staffDisplay = getRequestStaffDisplay(request);
     const items = Array.isArray(request.prepared_items) && request.prepared_items.length
       ? request.prepared_items
       : request.items || [];
@@ -834,6 +847,10 @@ function renderRequestHistoryCards(requestList, options = {}) {
           <div>
             <span>ศูนย์</span>
             <strong>${escapeHtml(request.center || '-')}</strong>
+          </div>
+          <div>
+            <span>ผู้เบิก</span>
+            <strong>${escapeHtml(staffDisplay || '-')}</strong>
           </div>
           <div>
             <span>จัดของเมื่อ</span>
@@ -916,6 +933,7 @@ function renderStaffPendingRequests(requestList) {
 
   box.innerHTML = requestList.map((request) => {
     const requestId = request.requestId || request.request_id || '';
+    const staffDisplay = getRequestStaffDisplay(request);
     const itemRows = (request.items || []).map((item) => {
       const unit = getRequestItemUnit(request, item);
 
@@ -959,7 +977,7 @@ function renderStaffPendingRequests(requestList) {
           </div>
           <div>
             <span>ผู้เบิก</span>
-            <strong>${escapeHtml(request.staffName || request.staffCode || '-')}</strong>
+            <strong>${escapeHtml(staffDisplay || '-')}</strong>
           </div>
         </div>
 
