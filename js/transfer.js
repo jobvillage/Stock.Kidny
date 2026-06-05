@@ -2103,12 +2103,12 @@ function getPoLineReceivedStates(po = {}) {
     remainingQty: Number(item.qty) || 0,
   }));
 
-  const addReceivedToLine = (lineIndex, qty) => {
+  const addReceivedToLine = (lineIndex, qty, allowOverReceived = false) => {
     const state = states[lineIndex];
     if (!state || qty <= 0) return qty;
 
     const remaining = Math.max(0, state.requestedQty - state.receivedQty);
-    const usedQty = Math.min(remaining, qty);
+    const usedQty = allowOverReceived ? qty : Math.min(remaining, qty);
     state.receivedQty += usedQty;
     state.remainingQty = Math.max(0, state.requestedQty - state.receivedQty);
 
@@ -2128,7 +2128,7 @@ function getPoLineReceivedStates(po = {}) {
       : Number(lineIndexValue);
 
     if (Number.isInteger(lineIndex) && states[lineIndex]?.product === product) {
-      const overflowQty = addReceivedToLine(lineIndex, qty);
+      const overflowQty = addReceivedToLine(lineIndex, qty, true);
       if (overflowQty > 0) pendingReceived.push({ product, qty: overflowQty });
       return;
     }
@@ -3241,14 +3241,14 @@ function openPartialReceivePo(poId) {
             class="po-partial-qty"
             type="number"
             min="0"
-            max="${item.remainingQty}"
             value="${item.remainingQty}"
             data-product="${escapeHtml(item.product)}"
             data-requested-qty="${item.requestedQty}"
             data-received-qty="${item.receivedQty}"
             data-remaining-qty="${item.remainingQty}"
             data-line-index="${item.lineIndex}"
-            data-max="${item.remainingQty}"
+            data-original-value="${item.remainingQty}"
+            oninput="markPartialReceiveDirty(this)"
           />
           </div>
 
@@ -3292,7 +3292,7 @@ function openPartialReceivePo(poId) {
       <button 
         class="btn-po-finish" 
         type="button" 
-        onclick="fetchPoStatus()"
+        onclick="savePartialPoQuantityEdits('${escapeHtml(poId)}', this)"
       >
         เสร็จสิ้น
       </button>
@@ -3300,19 +3300,25 @@ function openPartialReceivePo(poId) {
   }
 }
 
-async function savePartialReceivePo(poId) {
+function markPartialReceiveDirty(input) {
+  if (!input) return;
+  input.dataset.dirty = String(input.value !== input.dataset.originalValue);
+}
+
+async function savePartialReceivePo(poId, options = {}) {
   const card = document.querySelector(`[data-po-id="${poId}"]`);
   if (!card) return;
 
-  const inputs = card.querySelectorAll('.po-partial-qty');
+  const dirtyOnly = options.dirtyOnly === true;
+  const fallbackRefresh = options.fallbackRefresh === true;
+  const inputs = Array.from(card.querySelectorAll('.po-partial-qty'))
+    .filter((input) => !dirtyOnly || input.dataset.dirty === 'true');
 
-  const items = Array.from(inputs).map((input) => {
+  const items = inputs.map((input) => {
     const product = input.dataset.product || '';
-    const max = Number(input.dataset.max) || 0;
     let qty = Number(input.value) || 0;
 
     if (qty < 0) qty = 0;
-    if (qty > max) qty = max;
 
     return { product, qty };
   }).map((item, index) => {
@@ -3326,11 +3332,90 @@ async function savePartialReceivePo(poId) {
   }).filter((item) => item.product && item.qty > 0);
 
   if (items.length === 0) {
+    if (fallbackRefresh) {
+      await fetchPoStatus();
+      return;
+    }
+
     showToast('⚠️ กรุณาระบุจำนวนรับเข้าอย่างน้อย 1 รายการ', 'error');
     return;
   }
 
   await receivePoItems(poId, items);
+}
+
+async function savePartialPoQuantityEdits(poId, button) {
+  const card = document.querySelector(`[data-po-id="${CSS.escape(poId)}"]`);
+  if (!card) return;
+
+  const inputs = Array.from(card.querySelectorAll('.po-partial-qty'))
+    .filter((input) => input.dataset.dirty === 'true');
+
+  if (inputs.length === 0) {
+    await fetchPoStatus();
+    return;
+  }
+
+  const items = inputs.map((input) => {
+    const lineIndex = Number(input.dataset.lineIndex ?? -1);
+    const receivedQty = Number(input.dataset.receivedQty || 0);
+    const editedRemainingQty = Math.max(0, Number(input.value) || 0);
+
+    return {
+      product: input.dataset.product || '',
+      qty: receivedQty + editedRemainingQty,
+      remainingQty: editedRemainingQty,
+      lineIndex: Number.isInteger(lineIndex) && lineIndex >= 0 ? lineIndex : undefined,
+      line_index: Number.isInteger(lineIndex) && lineIndex >= 0 ? lineIndex : undefined,
+      input,
+    };
+  }).filter((item) => item.product && item.lineIndex !== undefined);
+
+  if (!items.length) {
+    showToast('⚠️ ไม่พบรายการที่ต้องแก้ไข', 'error');
+    return;
+  }
+
+  const ok = confirm('ยืนยันบันทึกยอด PO ที่แก้ไข โดยยังไม่รับเข้าสต็อก ใช่ไหม?');
+  if (!ok) return;
+
+  if (button) button.disabled = true;
+  showToast('', 'loading', 'กำลังบันทึกยอด PO ที่แก้ไข...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('update_po_line_quantities', {
+      p_po_id: poId,
+      p_staff_code: currentUser?.code || '',
+      p_staff_name: currentUser?.name || currentUser?.code || '',
+      p_items: items.map(({ input, ...item }) => item),
+    });
+
+    if (error) throw error;
+
+    if (!data || data.success !== true || Number(data.matched_count ?? data.matchedCount ?? 0) <= 0) {
+      throw new Error(data?.message || 'บันทึกยอด PO ที่แก้ไขไม่สำเร็จ');
+    }
+
+    items.forEach(({ input, qty, remainingQty }) => {
+      const row = input.closest('.po-partial-row, .po-partial-line');
+      input.dataset.requestedQty = String(qty);
+      input.dataset.remainingQty = String(remainingQty);
+      input.dataset.originalValue = String(remainingQty);
+      input.dataset.dirty = 'false';
+      setPartialReceiveCell(row, 'requested-qty', qty);
+      setPartialReceiveCell(row, 'remaining-qty', remainingQty);
+    });
+
+    showToast('✅ บันทึกยอด PO ที่แก้ไขแล้ว ยังไม่ได้รับเข้าสต็อก', 'success');
+    await fetchPoStatus();
+    fetchPendingPoSummary?.();
+
+  } catch (error) {
+    console.error('savePartialPoQuantityEdits error:', error);
+    showToast(`❌ ${error.message || 'บันทึกยอด PO ที่แก้ไขไม่สำเร็จ'}`, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function receivePoItems(poId, items, options = {}) {
@@ -3350,15 +3435,6 @@ async function receivePoItems(poId, items, options = {}) {
 
   if (validItems.length === 0) {
     showToast('⚠️ กรุณากรอกจำนวนสินค้าที่ต้องการรับเข้า', 'error');
-    return null;
-  }
-
-  const overItem = validItems.find((item) => {
-    return item.remainingQty > 0 && item.qty > item.remainingQty;
-  });
-
-  if (overItem) {
-    showToast(`❌ ${overItem.product} รับเข้าเกินจำนวนคงเหลือ`, 'error');
     return null;
   }
 
@@ -3434,19 +3510,21 @@ function updatePartialReceiveRowAfterSave(row, receivedThisTime) {
   const requestedQty = Number(input.dataset.requestedQty || 0);
   const oldReceivedQty = Number(input.dataset.receivedQty || 0);
 
-  const newReceivedQty = Math.min(requestedQty, oldReceivedQty + receivedThisTime);
-  const newRemainingQty = Math.max(0, requestedQty - newReceivedQty);
+  const newReceivedQty = oldReceivedQty + receivedThisTime;
+  const nextRequestedQty = Math.max(requestedQty, newReceivedQty);
+  const newRemainingQty = Math.max(0, nextRequestedQty - newReceivedQty);
 
+  input.dataset.requestedQty = String(nextRequestedQty);
   input.dataset.receivedQty = String(newReceivedQty);
   input.dataset.remainingQty = String(newRemainingQty);
-  input.dataset.max = String(newRemainingQty);
-  input.max = String(newRemainingQty);
 
+  setPartialReceiveCell(row, 'requested-qty', nextRequestedQty);
   setPartialReceiveCell(row, 'received-qty', newReceivedQty);
   setPartialReceiveCell(row, 'remaining-qty', newRemainingQty);
 
   if (newRemainingQty <= 0) {
     input.value = 0;
+    input.dataset.originalValue = '0';
     input.disabled = true;
 
     if (button) {
@@ -3459,6 +3537,7 @@ function updatePartialReceiveRowAfterSave(row, receivedThisTime) {
   }
 
   input.value = newRemainingQty;
+  input.dataset.originalValue = String(newRemainingQty);
 }
 
 async function saveSinglePartialReceivePo(poId, button) {
@@ -3469,7 +3548,7 @@ async function saveSinglePartialReceivePo(poId, button) {
   if (!input) return;
 
   const product = input.dataset.product || '';
-  const remainingQty = Number(input.dataset.remainingQty || input.dataset.max || 0);
+  const remainingQty = Number(input.dataset.remainingQty || 0);
   const lineIndex = Number(input.dataset.lineIndex ?? -1);
   let qty = Number(input.value) || 0;
 
@@ -3482,11 +3561,6 @@ async function saveSinglePartialReceivePo(poId, button) {
     showToast('⚠️ กรุณาใส่จำนวนรับเข้า', 'error');
     input.focus();
     return;
-  }
-
-  if (qty > remainingQty) {
-    qty = remainingQty;
-    input.value = remainingQty;
   }
 
   const ok = confirm(`ยืนยันรับเข้า ${product} จำนวน ${qty} ชิ้น ใช่ไหม?`);
@@ -3516,6 +3590,7 @@ async function saveSinglePartialReceivePo(poId, button) {
   }
 
   updatePartialReceiveRowAfterSave(row, qty);
+  input.dataset.dirty = 'false';
 
   if (!row.classList.contains('is-received-complete')) {
     button.disabled = false;
