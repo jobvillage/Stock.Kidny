@@ -10,10 +10,10 @@ const ROLE_PERMISSIONS = {
   center_staff: ['out', 'request_status', 'transfer', 'po_status', 'stock'],
   committee: ['stock'],
 
-  // admin เปิด PO ได้ด้วย
+  // admin เปิด PR ได้ด้วย
   admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'committee'],
 
-  // adminR เปิด PO + รับของ + ดูรายการขอเบิก + ดู stock ได้
+  // adminR เปิด PR + รับของ + ดูรายการขอเบิก + ดู stock ได้
   adminR: ['in', 'pending', 'transfer', 'po_status', 'stock'],
 };
 
@@ -190,12 +190,12 @@ function applyRolePageLabels() {
   }
 
   if (['center_staff', 'admin', 'adminR'].includes(currentUser?.role)) {
-    if (transferTabText) transferTabText.textContent = 'เปิด PO';
-    if (transferTitle) transferTitle.textContent = 'เปิด PO';
-    if (transferDesc) transferDesc.textContent = 'เปิด PO / คำขอ PO เพื่อส่งรายการให้ผู้จัดของ';
+    if (transferTabText) transferTabText.textContent = 'เปิด PR';
+    if (transferTitle) transferTitle.textContent = 'เปิด PR';
+    if (transferDesc) transferDesc.textContent = 'เปิด PR / คำขอ PO เพื่อส่งรายการให้ผู้จัดของ';
 
     if (typeof modeLabels !== 'undefined') {
-      modeLabels.transfer = 'เปิด PO';
+      modeLabels.transfer = 'เปิด PR';
     }
 
     renderPoCmoForm();

@@ -216,7 +216,7 @@ function getStockOrderMessage(center, product, currentQty) {
   if (min === '' || max === '') return '';
 
   const projectedQty = Number(currentQty || 0) + getTransferTrendQty(center, product);
-  return projectedQty < min ? 'สินค้าต้องเปิด PO' : '';
+  return projectedQty < min ? 'สินค้าต้องเปิด PR' : '';
 }
 
 function getAutoPoQty(center, product, currentQty) {
@@ -582,10 +582,10 @@ function renderStockDashboard() {
       });
     }
 
-    // เปิด PO ให้อยู่ช่องสุดท้ายเสมอ
+    // เปิด PR ให้อยู่ช่องสุดท้ายเสมอ
     columns.push({
       key: 'po',
-      label: 'เปิด PO',
+      label: 'เปิด PR',
       className: 'stock-col-po',
       getValue: (product) => getPendingPoQty(product)
     });
@@ -714,7 +714,7 @@ function getAutoPoItemsFromStockView() {
     return {
       center: '',
       items: [],
-      message: 'กรุณาเลือกศูนย์เดียวก่อนเปิด PO อัตโนมัติ',
+      message: 'กรุณาเลือกศูนย์เดียวก่อนเปิด PR อัตโนมัติ',
     };
   }
 
@@ -728,7 +728,7 @@ function getAutoPoItemsFromStockView() {
   return {
     center: primaryCenter,
     items,
-    message: items.length ? '' : 'ยังไม่มีสินค้าที่ต้องเปิด PO',
+    message: items.length ? '' : 'ยังไม่มีสินค้าที่ต้องเปิด PR',
   };
 }
 
@@ -760,7 +760,7 @@ function fillPoFormFromStockItems(center, items) {
 
   const poNote = document.getElementById('po-note');
   if (poNote && !poNote.value.trim()) {
-    poNote.value = 'เปิด PO อัตโนมัติจากหน้า Stock';
+    poNote.value = 'เปิด PR อัตโนมัติจากหน้า Stock';
   }
 
   const container = document.getElementById('po-products');
@@ -782,7 +782,7 @@ function fillPoFormFromStockItems(center, items) {
 
 function openAutoPoFromStock() {
   if (typeof canAccessTab === 'function' && !canAccessTab('transfer')) {
-    showToast('⚠️ ผู้ใช้นี้ไม่มีสิทธิ์เปิด PO', 'error');
+    showToast('⚠️ ผู้ใช้นี้ไม่มีสิทธิ์เปิด PR', 'error');
     return;
   }
 
@@ -806,7 +806,7 @@ function openAutoPoFromStock() {
   }
 
   fillPoFormFromStockItems(center, items);
-  showToast(`✅ เตรียมรายการเปิด PO อัตโนมัติ ${items.length} รายการแล้ว`, 'success');
+  showToast(`✅ เตรียมรายการเปิด PR อัตโนมัติ ${items.length} รายการแล้ว`, 'success');
 }
 
 function printStockView() {

@@ -39,7 +39,7 @@ const modeLabels = {
   in: 'รับสินค้าเข้า',
   out: 'ใบขอเบิก',
   request_status: 'สถานะใบขอเบิก',
-  transfer: 'เปิด PO',
+  transfer: 'เปิด PR',
   pending: 'รายการขอเบิก',
   po_status: 'สถานะ PO',
   stock: 'ดู Stock',

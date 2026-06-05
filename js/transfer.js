@@ -1553,20 +1553,20 @@ function renderPoCmoForm() {
     <div class="panel-title">
       <span class="title-icon transfer">📝</span>
       <div>
-        <h2>เปิด PO</h2>
+        <h2>เปิด PR</h2>
         <p>สร้างรายการสั่งสินค้า เพื่อรอรับสินค้าเข้าสต็อก</p>
       </div>
     </div>
 
     <div class="form-grid">
       <div class="field-group">
-        <label for="po-date">วันที่เปิด PO</label>
+        <label for="po-date">วันที่เปิด PR</label>
         <input type="date" id="po-date" />
       </div>
 
       <div class="field-group">
-        <label for="po-person">ผู้เปิด PO</label>
-        <input type="text" id="po-person" placeholder="กรอกชื่อผู้เปิด PO"/>
+        <label for="po-person">ผู้เปิด PR</label>
+        <input type="text" id="po-person" placeholder="กรอกชื่อผู้เปิด PR"/>
       </div>
 
       <div class="field-group">
@@ -1587,7 +1587,7 @@ function renderPoCmoForm() {
 
     <div class="products-header">
       <div>
-        <span>รายการสินค้าเปิด PO</span>
+        <span>รายการสินค้าเปิด PR</span>
         <small>เลือกสินค้าและจำนวนที่ต้องการสั่ง</small>
       </div>
       <button class="btn-add-row transfer" type="button" id="btn-add-po-row">
@@ -1599,7 +1599,7 @@ function renderPoCmoForm() {
 
     <button class="btn-submit btn-submit-transfer" id="btn-submit-po" type="button">
       <span>📝</span>
-      <span>บันทึกรายการเปิด PO</span>
+      <span>บันทึกรายการเปิด PR</span>
     </button>
   `;
 
@@ -1810,7 +1810,7 @@ function addPoRow() {
     </select>
 
     <div class="qty-input-with-unit po-qty-input-wrap">
-      <input type="number" min="1" inputmode="numeric" placeholder="จำนวน" aria-label="จำนวนเปิด PO" />
+      <input type="number" min="1" inputmode="numeric" placeholder="จำนวน" aria-label="จำนวนเปิด PR" />
       <span class="qty-unit po-unit-label" hidden></span>
     </div>
 
@@ -1869,12 +1869,12 @@ async function submitPoCmo() {
   }).filter((item) => item.product && item.qty > 0);
 
   if (!date) {
-    showToast('⚠️ กรุณาเลือกวันที่เปิด PO', 'error');
+    showToast('⚠️ กรุณาเลือกวันที่เปิด PR', 'error');
     return;
   }
 
   if (!person) {
-    showToast('⚠️ กรุณากรอกชื่อผู้เปิด PO', 'error');
+    showToast('⚠️ กรุณากรอกชื่อผู้เปิด PR', 'error');
     document.getElementById('po-person')?.focus();
     return;
   }
@@ -1891,7 +1891,7 @@ async function submitPoCmo() {
   }
 
   btn.disabled = true;
-  showToast('', 'loading', 'กำลังบันทึกรายการเปิด PO...');
+  showToast('', 'loading', 'กำลังบันทึกรายการเปิด PR...');
 
   try {
     let data = null;
@@ -2276,11 +2276,11 @@ function renderPoStatus(poList) {
 
         <div class="stock-request-meta">
           <div>
-            <span>วันที่เปิด PO</span>
+            <span>วันที่เปิด PR</span>
             <strong>${escapeHtml(po.po_date || '-')}</strong>
           </div>
           <div>
-            <span>ผู้เปิด PO</span>
+            <span>ผู้เปิด PR</span>
             <strong>${escapeHtml(po.po_person || '-')}</strong>
           </div>
           <div>
@@ -2315,7 +2315,7 @@ function renderPoStatus(poList) {
             <button 
               class="btn-po-receive" 
               type="button" 
-              onclick="receivePoFull('${escapeHtml(po.po_id || '')}')"
+              data-receive-po-full="${escapeHtml(po.po_id || '')}"
             >
               รับเข้าทั้งใบ
             </button>
@@ -2323,7 +2323,7 @@ function renderPoStatus(poList) {
             <button 
               class="btn-po-receive-secondary" 
               type="button" 
-              onclick="openPartialReceivePo('${escapeHtml(po.po_id || '')}')"
+              data-open-partial-po="${escapeHtml(po.po_id || '')}"
             >
               รับบางรายการ
             </button>
@@ -2540,6 +2540,34 @@ async function savePoEdit(poId) {
 }
 
 document.addEventListener('click', (event) => {
+  const receiveFullButton = event.target.closest('[data-receive-po-full]');
+  if (receiveFullButton) {
+    event.preventDefault();
+    receivePoFull(receiveFullButton.dataset.receivePoFull || '');
+    return;
+  }
+
+  const openPartialButton = event.target.closest('[data-open-partial-po]');
+  if (openPartialButton) {
+    event.preventDefault();
+    openPartialReceivePo(openPartialButton.dataset.openPartialPo || '');
+    return;
+  }
+
+  const saveSingleButton = event.target.closest('[data-save-single-partial-po]');
+  if (saveSingleButton) {
+    event.preventDefault();
+    saveSinglePartialReceivePo(saveSingleButton.dataset.saveSinglePartialPo || '', saveSingleButton);
+    return;
+  }
+
+  const saveEditsButton = event.target.closest('[data-save-partial-po-edits]');
+  if (saveEditsButton) {
+    event.preventDefault();
+    savePartialPoQuantityEdits(saveEditsButton.dataset.savePartialPoEdits || '', saveEditsButton);
+    return;
+  }
+
   const button = event.target.closest('[data-edit-po-id]');
   if (!button) return;
 
@@ -2700,8 +2728,8 @@ function printPoDocument(poId) {
         <div class="meta">
           <div><strong>เลข PO:</strong> ${escapeHtml(po.po_id || '-')}</div>
           <div><strong>สถานะ:</strong> ${escapeHtml(statusText)}</div>
-          <div><strong>วันที่เปิด PO:</strong> ${escapeHtml(po.po_date || '-')}</div>
-          <div><strong>ผู้เปิด PO:</strong> ${escapeHtml(po.po_person || '-')}</div>
+          <div><strong>วันที่เปิด PR:</strong> ${escapeHtml(po.po_date || '-')}</div>
+          <div><strong>ผู้เปิด PR:</strong> ${escapeHtml(po.po_person || '-')}</div>
           <div><strong>ศูนย์รับเข้า:</strong> ${escapeHtml(poCenter || '-')}</div>
           <div><strong>วันที่พิมพ์:</strong> ${new Date().toLocaleString('th-TH')}</div>
         </div>
@@ -3199,7 +3227,15 @@ function openPartialReceivePo(poId) {
     card.classList.remove('is-editing-po');
   }
 
-  if (!po || !card) return;
+  if (!po) {
+    showToast('❌ ไม่พบข้อมูล PO นี้ กรุณารีเฟรชรายการ', 'error');
+    return;
+  }
+
+  if (!card) {
+    showToast('❌ ไม่พบการ์ด PO นี้บนหน้าจอ', 'error');
+    return;
+  }
 
   const remainingItems = getPoRemainingItems(po);
   const itemBox = card.querySelector('.po-items-table');
@@ -3256,7 +3292,7 @@ function openPartialReceivePo(poId) {
             <button 
               class="btn-save-partial-line" 
               type="button"
-              onclick="saveSinglePartialReceivePo('${escapeHtml(poId)}', this)"
+              data-save-single-partial-po="${escapeHtml(poId)}"
             >
               บันทึก
             </button>
@@ -3276,7 +3312,7 @@ function openPartialReceivePo(poId) {
       <button 
         class="btn-po-receive" 
         type="button" 
-        onclick="receivePoFull('${escapeHtml(poId)}')"
+        data-receive-po-full="${escapeHtml(poId)}"
       >
         รับเข้าทั้งใบ
       </button>
@@ -3284,7 +3320,7 @@ function openPartialReceivePo(poId) {
       <button 
         class="btn-po-receive-secondary" 
         type="button" 
-        onclick="openPartialReceivePo('${escapeHtml(poId)}')"
+        data-open-partial-po="${escapeHtml(poId)}"
       >
         รีเฟรชรายการค้างรับ
       </button>
@@ -3292,7 +3328,7 @@ function openPartialReceivePo(poId) {
       <button 
         class="btn-po-finish" 
         type="button" 
-        onclick="savePartialPoQuantityEdits('${escapeHtml(poId)}', this)"
+        data-save-partial-po-edits="${escapeHtml(poId)}"
       >
         เสร็จสิ้น
       </button>
@@ -3346,7 +3382,10 @@ async function savePartialReceivePo(poId, options = {}) {
 
 async function savePartialPoQuantityEdits(poId, button) {
   const card = document.querySelector(`[data-po-id="${CSS.escape(poId)}"]`);
-  if (!card) return;
+  if (!card) {
+    showToast('❌ ไม่พบการ์ด PO นี้บนหน้าจอ', 'error');
+    return;
+  }
 
   const inputs = Array.from(card.querySelectorAll('.po-partial-qty'))
     .filter((input) => input.dataset.dirty === 'true');
@@ -3542,10 +3581,16 @@ function updatePartialReceiveRowAfterSave(row, receivedThisTime) {
 
 async function saveSinglePartialReceivePo(poId, button) {
   const row = button.closest('.po-partial-row, .po-partial-line');
-  if (!row) return;
+  if (!row) {
+    showToast('❌ ไม่พบแถวรายการรับเข้า', 'error');
+    return;
+  }
 
   const input = row.querySelector('.po-partial-qty');
-  if (!input) return;
+  if (!input) {
+    showToast('❌ ไม่พบช่องจำนวนรับเข้า', 'error');
+    return;
+  }
 
   const product = input.dataset.product || '';
   const remainingQty = Number(input.dataset.remainingQty || 0);
