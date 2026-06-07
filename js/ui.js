@@ -55,7 +55,7 @@ function setToday(id) {
 // TABS
 // =====================
 function switchTab(tab, force = false) {
-  if (!['in', 'out', 'request_status', 'transfer', 'pending', 'po_status', 'stock'].includes(tab)) return;
+  if (!['in', 'out', 'request_status', 'transfer', 'pending', 'po_status', 'stock', 'pr_approval', 'pr_approved', 'pr_open_po', 'pr_add_data', 'pr_export_data'].includes(tab)) return;
   if (!force && !requirePermission(tab)) return;
 
   document.querySelectorAll('[data-panel]').forEach((panel) => {

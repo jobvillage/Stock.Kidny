@@ -4,8 +4,38 @@ let localStockTypes = {};
 let pendingTransfers = [];
 let stockViewTransfers = [];
 
-const DB_STOCK_CACHE_KEY = 'stock_cache_v1';
+const DB_STOCK_CACHE_KEY = 'stock_cache_v2';
 const DB_STOCK_CACHE_MAX_AGE_MS = 60 * 1000;
+
+function normalizeStockProductKeyForLoad(value) {
+  if (typeof normalizeProductKey === 'function') {
+    return normalizeProductKey(value);
+  }
+
+  return String(value || '')
+    .normalize('NFC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function cleanStockProductName(value) {
+  return String(value || '')
+    .normalize('NFC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function findLoadedStockProductKey(center, product) {
+  const stock = localStock?.[center] || {};
+  const normalizedProduct = normalizeStockProductKeyForLoad(product);
+
+  return Object.keys(stock)
+    .find((stockProduct) => normalizeStockProductKeyForLoad(stockProduct) === normalizedProduct)
+    || '';
+}
 
 function clearStockCache() {
   try {
@@ -77,13 +107,16 @@ async function fetchStockUnitsFromTable() {
     const center = typeof normalizeCenterName === 'function'
       ? normalizeCenterName(item.center)
       : item.center;
+    const product = cleanStockProductName(item.product);
+
+    if (!center || !product) return;
 
     if (typeof setStockUnit === 'function') {
-      setStockUnit(center, item.product, item.unit);
+      setStockUnit(center, product, item.unit);
     }
 
     if (typeof setStockProductType === 'function') {
-      setStockProductType(center, item.product, item.product_type);
+      setStockProductType(center, product, item.product_type);
     }
   });
 }
@@ -111,26 +144,29 @@ async function fetchStock() {
       const center = typeof normalizeCenterName === 'function'
         ? normalizeCenterName(item.center)
         : item.center;
-      const product = item.product;
+      const product = cleanStockProductName(item.product);
+      if (!center || !product) return;
 
       if (!localStock[center]) {
         localStock[center] = {};
       }
 
-      localStock[center][product] = Number(item.qty) || 0;
+      const existingProduct = findLoadedStockProductKey(center, product);
+      const writeProduct = existingProduct || product;
+      localStock[center][writeProduct] = Number(localStock[center][writeProduct] || 0) + (Number(item.qty) || 0);
 
       if (typeof setStockUnit === 'function') {
-        setStockUnit(center, product, item.Unit || item.unit || item.unit_name || item.product_unit || item.uom);
+        setStockUnit(center, writeProduct, item.Unit || item.unit || item.unit_name || item.product_unit || item.uom);
       }
 
       if (typeof setStockProductType === 'function') {
-        setStockProductType(center, product, item.product_type || item.type || item.category || item.product_category);
+        setStockProductType(center, writeProduct, item.product_type || item.type || item.category || item.product_category);
       }
 
       if (typeof setStockMinMaxFromSupabase === 'function') {
         setStockMinMaxFromSupabase(
           center,
-          product,
+          writeProduct,
           item.min_qty,
           item.max_qty
         );

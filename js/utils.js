@@ -66,6 +66,10 @@ function newRequestId(type) {
     prefix = 'PO';
   }
 
+  if (type === 'pr') {
+    prefix = 'PR';
+  }
+
   if (type === 'transfer') {
     const timeText = [
       String(now.getHours()).padStart(2, '0'),
@@ -86,6 +90,50 @@ function newRequestId(type) {
 }
 
 window.newRequestId = newRequestId;
+
+async function newSupabaseDocumentId(prefix) {
+  const normalizedPrefix = String(prefix || '').trim().toUpperCase() || 'REQ';
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const dateText = `${yyyy}${mm}${dd}`;
+  const idPrefix = `${normalizedPrefix}-${dateText}-`;
+
+  if (typeof supabaseClient === 'undefined' || !supabaseClient) {
+    return newRequestId(normalizedPrefix.toLowerCase());
+  }
+
+  const documentSource = normalizedPrefix === 'PR'
+    ? { table: 'pr_requests', column: 'pr_id' }
+    : { table: 'po_cmo_requests', column: 'po_id' };
+
+  const { data, error } = await supabaseClient
+    .from(documentSource.table)
+    .select(documentSource.column)
+    .like(documentSource.column, `${idPrefix}%`)
+    .order(documentSource.column, { ascending: true })
+    .limit(1000);
+
+  if (error) {
+    throw error;
+  }
+
+  const usedNumbers = new Set(
+    (data || [])
+      .map((item) => Number(String(item[documentSource.column] || '').replace(idPrefix, '')))
+      .filter((value) => Number.isInteger(value) && value > 0)
+  );
+
+  let nextNumber = 1;
+  while (usedNumbers.has(nextNumber)) {
+    nextNumber += 1;
+  }
+
+  return `${idPrefix}${String(nextNumber).padStart(3, '0')}`;
+}
+
+window.newSupabaseDocumentId = newSupabaseDocumentId;
 
 function collectItemsFromRows(rows) {
   const items = [];

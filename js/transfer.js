@@ -187,12 +187,12 @@ async function sendPoEmail(poId, button) {
   const po = window.currentPoStatusList?.find((item) => item.po_id === poId);
 
   if (!po) {
-    showToast('❌ ไม่พบข้อมูล PO นี้', 'error');
+    showToast('❌ ไม่พบข้อมูล PR นี้', 'error');
     return;
   }
 
   if (!PO_EMAIL_WEB_APP_URL) {
-    showToast('⚠️ ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งอีเมล PO', 'error');
+    showToast('⚠️ ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งอีเมล PR', 'error');
     return;
   }
 
@@ -205,7 +205,7 @@ async function sendPoEmail(poId, button) {
     targetButton.innerHTML = '<span>📧</span><span>กำลังส่ง...</span>';
   }
 
-  showToast('', 'loading', 'กำลังส่งอีเมล PO...');
+  showToast('', 'loading', 'กำลังส่งอีเมล PR...');
 
   try {
     await fetch(PO_EMAIL_WEB_APP_URL, {
@@ -222,13 +222,13 @@ async function sendPoEmail(poId, button) {
       targetButton.classList.add('is-sent');
     }
 
-    showToast('✅ ส่งคำขออีเมล PO แล้ว', 'success');
+    showToast('✅ ส่งคำขออีเมล PR แล้ว', 'success');
   } catch (error) {
     console.error('send_po_email error:', error);
     if (targetButton) {
-      targetButton.innerHTML = '<span>📧</span><span>ส่งอีเมล PO</span>';
+      targetButton.innerHTML = '<span>📧</span><span>ส่งอีเมล PR</span>';
     }
-    showToast(`❌ ${error.message || 'ส่งอีเมล PO ไม่สำเร็จ'}`, 'error');
+    showToast(`❌ ${error.message || 'ส่งอีเมล PR ไม่สำเร็จ'}`, 'error');
   } finally {
     if (targetButton) {
       targetButton.disabled = false;
@@ -1601,6 +1601,52 @@ function renderPoCmoForm() {
       <span>📝</span>
       <span>บันทึกรายการเปิด PR</span>
     </button>
+
+    <div class="section-divider"></div>
+
+    <section class="pr-history-panel">
+      <div class="panel-title compact-title">
+        <span class="title-icon">📄</span>
+        <div>
+          <h2>ค้นหา PR ย้อนหลัง</h2>
+          <p>เรียกดู PR ที่เปิดแล้วตามสถานะ ศูนย์ หรือเลข PR</p>
+        </div>
+      </div>
+
+      <div class="request-history-filters stock-view-toolbar-3">
+        <div class="field-group">
+          <label for="pr-history-status">สถานะ PR</label>
+          <select id="pr-history-status">
+            <option value="">ทุกสถานะ</option>
+            <option value="pr_pending_approval" selected>รออนุมัติ</option>
+            <option value="pr_approved">อนุมัติแล้ว</option>
+            <option value="cancelled">ยกเลิก</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label for="pr-history-center">ศูนย์รับเข้า</label>
+          <select id="pr-history-center">
+            <option value="">ทุกศูนย์</option>
+            ${poCenterOptions}
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label for="pr-history-id">เลขที่ PR</label>
+          <input type="text" id="pr-history-id" placeholder="เช่น PR-20260606-001" />
+        </div>
+      </div>
+
+      <button class="btn-request-secondary pr-history-refresh" id="btn-fetch-pr-history" type="button">
+        <span>ค้นหา</span>
+        <strong>เรียกดู PR ย้อนหลัง</strong>
+      </button>
+
+      <div id="pr-history-list" class="request-history-list">
+        <div class="empty-state">กำลังโหลด PR ที่รออนุมัติ...</div>
+      </div>
+    </section>
   `;
 
   setToday('po-date');
@@ -1611,8 +1657,119 @@ function renderPoCmoForm() {
   document.getElementById('btn-add-po-row')?.addEventListener('click', addPoRow);
   document.getElementById('btn-submit-po')?.addEventListener('click', submitPoCmo);
   document.getElementById('po-center')?.addEventListener('change', updateAllPoRowUnits);
+  document.getElementById('btn-fetch-pr-history')?.addEventListener('click', fetchPrOpenHistory);
 
   addPoRow();
+  fetchPrOpenHistory({ autoPending: true });
+}
+
+function getPrOpenHistoryStatusText(status = '') {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'pr_approved' || normalized === 'approved') return 'อนุมัติแล้ว';
+  if (normalized === 'cancelled') return 'ยกเลิก';
+  return 'รออนุมัติ';
+}
+
+function renderPrOpenHistoryCards(records = []) {
+  if (!records.length) {
+    return '<div class="empty-state">ไม่พบ PR ย้อนหลังตามตัวกรอง</div>';
+  }
+
+  return records.map((record) => {
+    const items = normalizeItems(record.items);
+    const statusText = getPrOpenHistoryStatusText(record.status);
+    const isApproved = statusText === 'อนุมัติแล้ว';
+    const itemRows = items.map((item) => {
+      const unit = String(item.unit || item.Unit || '').trim();
+      return `
+        <div class="po-item-row">
+          <div class="po-item-name">${escapeHtml(item.product || '-')}</div>
+          <div class="po-item-qty">${Number(item.qty || 0).toLocaleString()}</div>
+          <div class="po-item-unit">${escapeHtml(unit)}</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <article class="stock-request-card pr-history-card">
+        <div class="stock-request-head pr-history-head">
+          <div>
+            <span class="overview-label">เลข PR</span>
+            <strong>${escapeHtml(record.po_id || '-')}</strong>
+          </div>
+          <span class="overview-pill ${isApproved ? 'is-completed' : ''}">${escapeHtml(statusText)}</span>
+        </div>
+
+        <div class="stock-request-meta">
+          <div>
+            <span>วันที่เปิด PR</span>
+            <strong>${escapeHtml(record.po_date || '-')}</strong>
+          </div>
+          <div>
+            <span>ศูนย์รับเข้า</span>
+            <strong>${escapeHtml(record.center || '-')}</strong>
+          </div>
+          <div>
+            <span>ผู้เปิด PR</span>
+            <strong>${escapeHtml(record.po_person || '-')}</strong>
+          </div>
+        </div>
+
+        ${record.note ? `
+          <div class="stock-request-note">
+            <span>หมายเหตุ</span>
+            <p>${escapeHtml(record.note)}</p>
+          </div>
+        ` : ''}
+
+        <div class="stock-request-items">
+          <div class="stock-request-section-title">รายการสินค้าเปิด PR</div>
+          <div class="po-items-table">
+            <div class="po-items-head">
+              <div>สินค้า</div>
+              <div>จำนวน</div>
+              <div>หน่วย</div>
+            </div>
+            ${itemRows || '<div class="empty-state">ไม่มีรายการสินค้า</div>'}
+          </div>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+async function fetchPrOpenHistory(options = {}) {
+  const box = document.getElementById('pr-history-list');
+  if (!box) return;
+
+  const status = options.autoPending
+    ? 'pr_pending_approval'
+    : (document.getElementById('pr-history-status')?.value || '');
+  const center = document.getElementById('pr-history-center')?.value || '';
+  const prId = document.getElementById('pr-history-id')?.value.trim() || '';
+
+  box.innerHTML = `<div class="empty-state">${options.autoPending ? 'กำลังโหลด PR ที่รออนุมัติ...' : 'กำลังโหลด PR ย้อนหลัง...'}</div>`;
+
+  try {
+    const { data, error } = await supabaseClient.rpc('get_pr_approval_status');
+
+    if (error) {
+      throw error;
+    }
+
+    const searchText = prId.toLowerCase();
+    window.currentPrOpenHistoryList = (data || [])
+      .filter((record) => String(record.po_id || '').toUpperCase().startsWith('PR-'))
+      .filter((record) => !status || String(record.status || '') === status)
+      .filter((record) => !center || String(record.center || '') === center)
+      .filter((record) => !searchText || String(record.po_id || '').toLowerCase().includes(searchText));
+
+    box.innerHTML = renderPrOpenHistoryCards(window.currentPrOpenHistoryList);
+
+  } catch (error) {
+    console.error('fetchPrOpenHistory error:', error);
+    box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลด PR ย้อนหลังไม่สำเร็จ')}</div>`;
+  }
 }
 
 function renderAdminTransferForm() {
@@ -1784,6 +1941,10 @@ function canReceivePo() {
 }
 
 function canEditPo(po = {}) {
+  if (!isReceiveablePoRecord(po)) {
+    return false;
+  }
+
   if (!po || ['received', 'partial_received'].includes(po.status)) {
     return false;
   }
@@ -1898,8 +2059,10 @@ async function submitPoCmo() {
     let error = null;
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const createPoParams = {
-        p_client_request_id: newRequestId('po'),
+      const createPrParams = {
+        p_client_request_id: typeof newSupabaseDocumentId === 'function'
+          ? await newSupabaseDocumentId('PR')
+          : newRequestId('pr'),
         p_staff_code: currentUser?.code || '',
         p_date: date,
         p_person: person,
@@ -1908,13 +2071,13 @@ async function submitPoCmo() {
         p_items: items,
       };
 
-      const result = await supabaseClient.rpc('create_po_cmo', createPoParams);
+      const result = await supabaseClient.rpc('create_pr_request', createPrParams);
       data = result.data;
       error = result.error;
 
       if (error && isRpcSignatureError(error)) {
-        const { p_center, ...fallbackParams } = createPoParams;
-        const fallback = await supabaseClient.rpc('create_po_cmo', fallbackParams);
+        const { p_center, ...fallbackParams } = createPrParams;
+        const fallback = await supabaseClient.rpc('create_pr_request', fallbackParams);
         data = fallback.data;
         error = fallback.error;
       }
@@ -1929,14 +2092,14 @@ async function submitPoCmo() {
     }
 
     if (!data || data.success !== true) {
-      throw new Error(data?.message || 'บันทึก PO ไม่สำเร็จ');
+      throw new Error(data?.message || 'บันทึก PR ไม่สำเร็จ');
     }
 
     if (data.duplicate === true) {
-      throw new Error('เลข PO ซ้ำกับรายการเดิม กรุณากดบันทึกใหม่อีกครั้ง');
+      throw new Error('เลข PR ซ้ำกับรายการเดิม กรุณากดบันทึกใหม่อีกครั้ง');
     }
 
-    showToast(`✅ บันทึก PO สำเร็จ: ${data.po_id || ''}`, 'success');
+    showToast(`✅ บันทึก PR สำเร็จ: ${data.po_id || ''}`, 'success');
 
     savePoCenterToCache(data.po_id || data.poId || data.po_no || data.poNo || '', center);
 
@@ -1968,9 +2131,13 @@ async function submitPoCmo() {
       setToday('po-date');
     }
 
+    if (Array.isArray(window.currentPrOpenHistoryList)) {
+      await fetchPrOpenHistory();
+    }
+
   } catch (error) {
-    console.error('create_po_cmo error:', error);
-    showToast(`❌ ${error.message || 'บันทึก PO ไม่สำเร็จ'}`, 'error');
+    console.error('create_pr_request error:', error);
+    showToast(`❌ ${error.message || 'บันทึก PR ไม่สำเร็จ'}`, 'error');
   } finally {
     btn.disabled = false;
   }
@@ -1983,13 +2150,26 @@ async function fetchPoStatus() {
   box.innerHTML = '<div class="empty-state">กำลังโหลดสถานะ PO...</div>';
 
   try {
-    const { data, error } = await supabaseClient.rpc('get_po_status');
+    const [{ data, error }, prResult] = await Promise.all([
+      supabaseClient.rpc('get_po_status'),
+      fetchPrStatusForPoPage(),
+    ]);
 
     if (error) {
       throw error;
     }
 
-    let poList = data || [];
+    const recordsById = new Map();
+    [...(data || []), ...(prResult || [])]
+      .filter((po) => isPoDocumentRecord(po))
+      .forEach((po) => {
+        const poId = po.po_id || po.po_no || po.po_number || po.request_id || po.id || '';
+        if (!poId || recordsById.has(poId)) return;
+        recordsById.set(poId, po);
+      });
+
+    let poList = Array.from(recordsById.values())
+      .sort((a, b) => new Date(b.created_at || b.updated_at || 0) - new Date(a.created_at || a.updated_at || 0));
 
     // ค้นหาเลข PO
     const keyword = String(document.getElementById('po-status-search')?.value || '')
@@ -2059,6 +2239,31 @@ async function fetchPoStatus() {
     console.error('fetchPoStatus error:', error);
     box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลดสถานะ PO ไม่สำเร็จ')}</div>`;
   }
+}
+
+async function fetchPrStatusForPoPage() {
+  try {
+    const { data, error } = await supabaseClient.rpc('get_pr_approval_status');
+
+    if (error) {
+      console.warn('get_pr_approval_status skipped for PO status:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.warn('get_pr_approval_status unavailable for PO status:', error);
+    return [];
+  }
+}
+
+function isPoDocumentRecord(po = {}) {
+  const documentId = String(po.po_id || po.po_no || po.po_number || '').toUpperCase();
+  return documentId.startsWith('PO-') || documentId.startsWith('PR-');
+}
+
+function isReceiveablePoRecord(po = {}) {
+  return String(po.po_id || po.po_no || po.po_number || '').toUpperCase().startsWith('PO-');
 }
 
 function getPoStatusFilter() {
@@ -2238,7 +2443,7 @@ function renderPoStatus(poList) {
       <article class="stock-request-card" data-po-id="${escapeHtml(po.po_id || '')}">
         <div class="stock-request-head">
           <div>
-            <span class="overview-label">เลข PO</span>
+            <span class="overview-label">เลข PR</span>
             <strong>${escapeHtml(po.po_id || '-')}</strong>
           </div>
 
@@ -2251,7 +2456,7 @@ function renderPoStatus(poList) {
                 type="button"
                 onclick="printPoDocument('${escapeHtml(po.po_id || '')}')"
               >
-                🖨️ พิมพ์ PO
+                🖨️ พิมพ์ PR
               </button>
 
               ${canEditPo(po) ? `
@@ -2310,7 +2515,7 @@ function renderPoStatus(poList) {
           </div>
         </div>
 
-        ${canReceivePo() && po.status !== 'received' ? `
+        ${isReceiveablePoRecord(po) && canReceivePo() && po.status !== 'received' ? `
           <div class="po-receive-actions">
             <button 
               class="btn-po-receive" 
@@ -2338,7 +2543,7 @@ function renderPoStatus(poList) {
             onclick="sendPoEmail('${escapeHtml(po.po_id || '')}', this)"
           >
             <span>📧</span>
-            <span>ส่งอีเมล PO</span>
+            <span>ส่งอีเมล PR</span>
           </button>
         </div>
       </article>
@@ -2618,7 +2823,7 @@ function printPoDocument(poId) {
     <html lang="th">
     <head>
       <meta charset="UTF-8">
-      <title>ใบ PO ${escapeHtml(po.po_id || '')}</title>
+      <title>ใบ PR ${escapeHtml(po.po_id || '')}</title>
       <style>
         body {
           font-family: "Sarabun", Arial, sans-serif;
@@ -2722,11 +2927,11 @@ function printPoDocument(poId) {
 
     <body>
       <div class="doc">
-        <h1>ใบสั่งสินค้า / PO</h1>
+        <h1>ใบขอซื้อ / PR</h1>
         <div class="subtitle">สำหรับตรวจเช็กรายการเมื่อสินค้ามาส่ง</div>
 
         <div class="meta">
-          <div><strong>เลข PO:</strong> ${escapeHtml(po.po_id || '-')}</div>
+          <div><strong>เลข PR:</strong> ${escapeHtml(po.po_id || '-')}</div>
           <div><strong>สถานะ:</strong> ${escapeHtml(statusText)}</div>
           <div><strong>วันที่เปิด PR:</strong> ${escapeHtml(po.po_date || '-')}</div>
           <div><strong>ผู้เปิด PR:</strong> ${escapeHtml(po.po_person || '-')}</div>
@@ -2739,7 +2944,7 @@ function printPoDocument(poId) {
             <tr>
               <th style="width: 42px;">ลำดับ</th>
               <th>รายการสินค้า</th>
-              <th style="width: 80px;">จำนวน PO</th>
+              <th style="width: 80px;">จำนวน PR</th>
               <th style="width: 90px;">รับเข้าแล้ว</th>
               <th style="width: 80px;">คงเหลือ</th>
               <th style="width: 100px;">จำนวนที่มาส่ง</th>
@@ -2757,11 +2962,11 @@ function printPoDocument(poId) {
 
         ${po.note ? `
           <div class="note-box">
-            <strong>หมายเหตุ PO:</strong> ${escapeHtml(po.note)}
+            <strong>หมายเหตุ PR:</strong> ${escapeHtml(po.note)}
           </div>
         ` : `
           <div class="note-box">
-            <strong>หมายเหตุ PO:</strong>
+            <strong>หมายเหตุ PR:</strong>
           </div>
         `}
 
@@ -2787,7 +2992,7 @@ function printPoDocument(poId) {
   const printWindow = window.open('', '_blank');
 
   if (!printWindow) {
-    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ PO', 'error');
+    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ PR', 'error');
     return;
   }
 
@@ -3469,6 +3674,7 @@ async function receivePoItems(poId, items, options = {}) {
       remainingQty: Number(item.remainingQty || item.remaining_qty || 0),
       lineIndex: item.lineIndex ?? item.line_index,
       center: item.center || item.stock_center || targetCenter,
+      ...getPoReceiveLineMeta(po, item),
     }))
     .filter((item) => item.product && item.qty > 0);
 
@@ -3491,6 +3697,13 @@ async function receivePoItems(poId, items, options = {}) {
         qty: item.qty,
         line_index: item.lineIndex,
         lineIndex: item.lineIndex,
+        unit: item.unit,
+        unit_qty: item.unit_qty,
+        unitQty: item.unit_qty,
+        unit_price: item.unit_price,
+        unitPrice: item.unit_price,
+        total_price: item.total_price,
+        totalPrice: item.total_price,
         center: item.center || targetCenter,
         stock_center: item.center || targetCenter,
       })),
@@ -3531,6 +3744,49 @@ async function receivePoItems(poId, items, options = {}) {
     showToast(`❌ ${error.message || 'รับสินค้าเข้าไม่สำเร็จ'}`, 'error');
     return null;
   }
+}
+
+function getPoReceiveLineMeta(po = {}, receivedItem = {}) {
+  const lineIndexValue = receivedItem.lineIndex ?? receivedItem.line_index;
+  const lineIndex = lineIndexValue === undefined || lineIndexValue === null || lineIndexValue === ''
+    ? -1
+    : Number(lineIndexValue);
+  const poItems = Array.isArray(po.items) ? po.items : [];
+  const poLine = Number.isInteger(lineIndex) && lineIndex >= 0
+    ? poItems[lineIndex]
+    : poItems.find((item) => item.product === receivedItem.product);
+
+  if (!poLine) {
+    return {};
+  }
+
+  const unit = getPoItemUnit(poLine, getPoCenter(po));
+  const unitQty = Number(
+    poLine.unit_qty
+    ?? poLine.unitQty
+    ?? poLine.unit_count
+    ?? poLine.unitCount
+    ?? 0
+  ) || null;
+  const totalPrice = Number(
+    poLine.total_price
+    ?? poLine.totalPrice
+    ?? poLine.line_total
+    ?? poLine.lineTotal
+    ?? 0
+  ) || null;
+  const unitPrice = Number(
+    poLine.unit_price
+    ?? poLine.unitPrice
+    ?? 0
+  ) || (totalPrice && unitQty ? totalPrice / unitQty : null);
+
+  return {
+    unit,
+    unit_qty: unitQty,
+    unit_price: unitPrice,
+    total_price: totalPrice,
+  };
 }
 
 function setPartialReceiveCell(row, role, value) {
