@@ -1560,6 +1560,11 @@ function renderPoCmoForm() {
 
     <div class="form-grid">
       <div class="field-group">
+        <label for="po-pr-id">เลขที่ PR</label>
+        <input type="text" id="po-pr-id" placeholder="กำลังดึงเลข PR..." readonly />
+      </div>
+
+      <div class="field-group">
         <label for="po-date">วันที่เปิด PR</label>
         <input type="date" id="po-date" />
       </div>
@@ -1653,6 +1658,7 @@ function renderPoCmoForm() {
   if (currentUser?.role === 'center_staff' && currentUser.center) {
     lockSelectToValue('po-center', currentUser.center);
   }
+  refreshNextPrDocumentId();
 
   document.getElementById('btn-add-po-row')?.addEventListener('click', addPoRow);
   document.getElementById('btn-submit-po')?.addEventListener('click', submitPoCmo);
@@ -2011,10 +2017,40 @@ function updateAllPoRowUnits() {
   document.querySelectorAll('#po-products .po-row').forEach((row) => updatePoRowUnit(row));
 }
 
+async function refreshNextPrDocumentId(excludedIds = []) {
+  const input = document.getElementById('po-pr-id');
+  if (!input) return '';
+
+  try {
+    if (typeof supabaseClient !== 'undefined' && supabaseClient?.rpc) {
+      const { data, error } = await supabaseClient.rpc('next_pr_request_id');
+      if (!error && data) {
+        const rpcPrId = String(data || '').trim();
+        if (rpcPrId && !excludedIds.includes(rpcPrId)) {
+          input.value = rpcPrId;
+          return input.value;
+        }
+      } else if (error) {
+        console.warn('next_pr_request_id fallback:', error);
+      }
+    }
+
+    input.value = typeof newSupabaseDocumentId === 'function'
+      ? await newSupabaseDocumentId('PR', excludedIds)
+      : newRequestId('pr');
+    return input.value;
+  } catch (error) {
+    console.warn('refreshNextPrDocumentId error:', error);
+    input.value = newRequestId('pr');
+    return input.value;
+  }
+}
+
 async function submitPoCmo() {
   const btn = document.getElementById('btn-submit-po');
   if (!btn || btn.disabled) return;
 
+  const prIdInput = document.getElementById('po-pr-id');
   const date = document.getElementById('po-date')?.value;
   const person = document.getElementById('po-person')?.value.trim() || '';
   const center = document.getElementById('po-center')?.value || currentUser?.center || '';
@@ -2057,12 +2093,15 @@ async function submitPoCmo() {
   try {
     let data = null;
     let error = null;
+    const attemptedPrIds = [];
+    let nextPrId = String(prIdInput?.value || '').trim();
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
+      const clientRequestId = nextPrId || await refreshNextPrDocumentId(attemptedPrIds);
+      if (prIdInput) prIdInput.value = clientRequestId;
+
       const createPrParams = {
-        p_client_request_id: typeof newSupabaseDocumentId === 'function'
-          ? await newSupabaseDocumentId('PR')
-          : newRequestId('pr'),
+        p_client_request_id: clientRequestId,
         p_staff_code: currentUser?.code || '',
         p_date: date,
         p_person: person,
@@ -2089,6 +2128,9 @@ async function submitPoCmo() {
       if (data?.duplicate !== true) {
         break;
       }
+
+      attemptedPrIds.push(clientRequestId);
+      nextPrId = await refreshNextPrDocumentId(attemptedPrIds);
     }
 
     if (!data || data.success !== true) {
@@ -2130,6 +2172,8 @@ async function submitPoCmo() {
     if (document.getElementById('po-date')) {
       setToday('po-date');
     }
+
+    await refreshNextPrDocumentId();
 
     if (Array.isArray(window.currentPrOpenHistoryList)) {
       await fetchPrOpenHistory();
@@ -3704,6 +3748,9 @@ async function receivePoItems(poId, items, options = {}) {
         unitPrice: item.unit_price,
         total_price: item.total_price,
         totalPrice: item.total_price,
+        vendor_name: item.vendor_name || item.vendorName || item.company || '',
+        vendorName: item.vendor_name || item.vendorName || item.company || '',
+        company: item.company || item.vendor_name || item.vendorName || '',
         center: item.center || targetCenter,
         stock_center: item.center || targetCenter,
       })),
@@ -3786,6 +3833,8 @@ function getPoReceiveLineMeta(po = {}, receivedItem = {}) {
     unit_qty: unitQty,
     unit_price: unitPrice,
     total_price: totalPrice,
+    vendor_name: poLine.vendor_name || poLine.vendorName || poLine.company || '',
+    company: poLine.company || poLine.vendor_name || poLine.vendorName || '',
   };
 }
 

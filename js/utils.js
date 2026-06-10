@@ -91,7 +91,7 @@ function newRequestId(type) {
 
 window.newRequestId = newRequestId;
 
-async function newSupabaseDocumentId(prefix) {
+async function newSupabaseDocumentId(prefix, excludedIds = []) {
   const normalizedPrefix = String(prefix || '').trim().toUpperCase() || 'REQ';
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -124,6 +124,13 @@ async function newSupabaseDocumentId(prefix) {
       .map((item) => Number(String(item[documentSource.column] || '').replace(idPrefix, '')))
       .filter((value) => Number.isInteger(value) && value > 0)
   );
+
+  (excludedIds || []).forEach((id) => {
+    const number = Number(String(id || '').replace(idPrefix, ''));
+    if (Number.isInteger(number) && number > 0) {
+      usedNumbers.add(number);
+    }
+  });
 
   let nextNumber = 1;
   while (usedNumbers.has(nextNumber)) {

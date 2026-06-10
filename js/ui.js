@@ -306,6 +306,8 @@ function shouldUseNativeSelectOnAndroid() {
   return Boolean(isAndroid && isTouch);
 }
 
+window.shouldUseNativeSelectOnAndroid = shouldUseNativeSelectOnAndroid;
+
 function positionTomSelectDropdown(ts) {
   if (!ts || !ts.dropdown || !ts.control) return;
 
@@ -325,6 +327,8 @@ function positionTomSelectDropdown(ts) {
     dropdown.style.overflowY = 'auto';
   });
 }
+
+window.positionTomSelectDropdown = positionTomSelectDropdown;
 
 function updateStockInfo(select) {
   const row = select.closest('.product-row');

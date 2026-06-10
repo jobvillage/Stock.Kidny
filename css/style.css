@@ -1258,6 +1258,70 @@ button {
   align-items: start;
 }
 
+.pr-add-data-layout {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+}
+
+.pr-add-data-section {
+  display: grid;
+  gap: 16px;
+}
+
+.pr-add-data-section + .pr-add-data-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e7ecf3;
+}
+
+.pr-add-data-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+}
+
+.pr-add-data-section-head h4 {
+  margin: 0;
+  color: #172033;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.pr-add-data-section-head span {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.pr-add-data-actions {
+  display: block;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e7ecf3;
+}
+
+.pr-add-data-actions .btn-submit {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #2563eb, #0f9f6e);
+  color: #ffffff;
+  box-shadow: 0 16px 32px rgba(37, 99, 235, 0.18);
+}
+
+.pr-add-data-actions .btn-submit:hover:not(:disabled) {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+}
+
+.pr-add-data-actions .btn-submit:disabled {
+  background: #cfd7e3;
+  color: #ffffff;
+  box-shadow: none;
+}
+
 .pr-main-card,
 .pr-summary-card {
   border: 1px solid #e3e8ef;
@@ -1893,6 +1957,126 @@ button {
   border-radius: 14px;
   background: #f8fafc;
   font-weight: 800;
+}
+
+.pr-check-grid .pr-location-check {
+  position: relative;
+  min-height: 58px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.pr-location-check input[data-add-data-location] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.pr-location-check-box {
+  width: 42px;
+  height: 32px;
+  border: 1.5px solid #d9e1ea;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 0 rgba(16, 185, 129, 0);
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  flex: 0 0 auto;
+}
+
+.pr-location-check-text {
+  color: #667085;
+  line-height: 1.2;
+  word-break: break-word;
+  transition: color 0.18s ease;
+}
+
+.pr-location-check.is-checked,
+.pr-location-check:has(input[data-add-data-location]:checked) {
+  border-color: #34d399;
+  background: #ecfdf5;
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.14);
+}
+
+.pr-location-check.is-checked .pr-location-check-box,
+.pr-location-check:has(input[data-add-data-location]:checked) .pr-location-check-box {
+  border-color: #10b981;
+  background: #10b981;
+  box-shadow: inset 0 0 0 8px #ffffff;
+}
+
+.pr-location-check.is-checked .pr-location-check-text,
+.pr-location-check:has(input[data-add-data-location]:checked) .pr-location-check-text {
+  color: #0f766e;
+}
+
+.pr-location-check:hover {
+  border-color: #a7f3d0;
+  transform: translateY(-1px);
+}
+
+.pr-stock-qty-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.pr-stock-qty-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid #e3e8ef;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.pr-stock-qty-box span {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.pr-stock-qty-box input {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.pr-stock-qty-box input[readonly] {
+  background: #f3f6fa;
+  color: #7a8494;
+  border-color: #dfe6ef;
+  cursor: default;
+}
+
+.pr-add-data-cost-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pr-add-data-cost-row input {
+  min-height: 50px;
+  text-align: center;
+  font-weight: 800;
+}
+
+@media (max-width: 720px) {
+  .pr-add-data-cost-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 860px) {

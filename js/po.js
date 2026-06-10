@@ -1,5 +1,5 @@
 const PR_APPROVER_CODES = ['user1', 'user2'];
-const PR_PO_MANAGER_CODES = ['user3'];
+const PR_PO_MANAGER_CODES = ['user3', 'user4'];
 const PR_APPROVER_BY_CODE = {
   user1: 'daeng',
   user2: 'toy',
@@ -31,7 +31,7 @@ const PR_COMPANIES = [
     items: ['น้ำยาเครื่องล้างตัวกรอง MDT (ฝาขาว)'],
   },
   {
-    name: 'Kidney Clean',
+    name: 'Meditop',
     items: ['น้ำยาเครื่องล้างตัวกรอง Kidney Clean (ฝาดำ)'],
   },
   {
@@ -44,6 +44,8 @@ let prApprovalRecords = [];
 let prOpenPoRows = [];
 let prOpenPoSelectedPrId = '';
 let prOpenPoSelectedCompany = '';
+let prVendorProductCompanyMap = new Map();
+let prVendorProductCompanyLoaded = false;
 
 function getPrUserCode() {
   return String(currentUser?.code || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
@@ -54,7 +56,7 @@ function isPrApprovalUser() {
 }
 
 function isPrPoManagerUser() {
-  return PR_PO_MANAGER_CODES.includes(getPrUserCode());
+  return currentUser?.role === 'pr_po_manager' || PR_PO_MANAGER_CODES.includes(getPrUserCode());
 }
 
 function setupPrPoWorkspaceForSpecialUsers() {
@@ -220,6 +222,11 @@ async function fetchPrApprovalRecords() {
   }
 
   try {
+    await fetchPrVendorProductCompanyMap();
+
+    console.log('prVendorProductCompanyMap size:', prVendorProductCompanyMap.size);
+    console.log('map entries:', [...prVendorProductCompanyMap.entries()]);
+
     const { data, error } = await supabaseClient.rpc('get_pr_approval_status');
 
     if (error) {
@@ -242,6 +249,8 @@ async function fetchPrApprovalRecords() {
 
 async function fetchPrManagerRecords() {
   try {
+    await fetchPrVendorProductCompanyMap();
+
     const { data, error } = await supabaseClient.rpc('get_pr_approval_status');
 
     if (error) {
@@ -468,19 +477,64 @@ function getPrCompanyGroups(items = []) {
   return Array.from(groups.values());
 }
 
+async function fetchPrVendorProductCompanyMap() {
+  if (prVendorProductCompanyLoaded || typeof supabaseClient === 'undefined') return prVendorProductCompanyMap;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('vendor_products')
+      .select('product, updated_at, vendors(vendor_name)')
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    const nextMap = new Map();
+
+    (data || []).forEach((row) => {
+      const productKey = normalizePrProductName(row.product);
+      if (!productKey || nextMap.has(productKey)) return;
+
+      const vendor = Array.isArray(row.vendors) ? row.vendors[0] : row.vendors;
+      const vendorName = String(vendor?.vendor_name || '').trim();
+      if (vendorName) {
+        nextMap.set(productKey, vendorName);
+      }
+    });
+
+    // ✅ เพิ่มตรงนี้
+    console.log('=== vendor_products raw data ===', data);
+    console.log('=== prVendorProductCompanyMap ===', [...nextMap.entries()]);
+
+    prVendorProductCompanyMap = nextMap;
+    prVendorProductCompanyLoaded = true;
+
+  } catch (error) {
+    console.warn('Load PR vendor product company map failed:', error);
+    prVendorProductCompanyLoaded = true;
+  }
+
+  return prVendorProductCompanyMap;
+}
+
 function getPrCompanyNameForProduct(product) {
   const normalizedProduct = normalizePrProductName(product);
 
-  if (normalizedProduct.includes('nss') || normalizedProduct.includes('น้ำเกลือ')) {
-    return 'NSS';
+  // 1. ลองจาก Supabase map ก่อน
+  const vendorCompany = prVendorProductCompanyMap.get(normalizedProduct);
+  if (vendorCompany) return vendorCompany;
+
+  // 2. fallback: ลองจาก PR_COMPANIES (hardcoded)
+  for (const company of PR_COMPANIES) {
+    const found = company.items.some(
+      (item) => normalizePrProductName(item) === normalizedProduct
+    );
+    if (found) return company.name;
   }
 
-  const matchedCompany = PR_COMPANIES.find((company) => {
-    if (company.name === 'ทั่วไป') return false;
-    return company.items.some((item) => normalizePrProductName(item) === normalizedProduct);
-  });
-
-  return matchedCompany?.name || 'ทั่วไป';
+  return 'ทั่วไป';
 }
 
 function normalizePrProductName(value) {
@@ -790,7 +844,7 @@ function renderOpenPoPanel() {
   const panel = ensurePrPanel('pr_open_po', 'panel-pr-open-po');
   const approvedRecords = prApprovalRecords.filter(isPrApprovedRecord);
   const selectedRecord = getSelectedApprovedPrForPo(approvedRecords);
-  const selectedPrItems = selectedRecord?.items || [];
+  ensurePrOpenPoRowsFromSelectedRecord(selectedRecord);
   const centerOptions = getPrPoStockLocations().map((center) => `
     <option value="${escapeHtml(center)}"${center === selectedRecord?.center ? ' selected' : ''}>
       ${escapeHtml(center)}
@@ -834,15 +888,6 @@ function renderOpenPoPanel() {
             ${centerOptions}
           </select>
         </div>
-        <div class="field-group">
-          <label for="pr-po-company">บริษัท</label>
-          <select id="pr-po-company" data-pr-open-po-company ${selectedRecord ? '' : 'disabled'}>
-            <option value="">ทุกบริษัทใน PR</option>
-            ${getPrCompanyGroups(selectedPrItems).map((company) => `
-              <option value="${escapeHtml(company.name)}"${company.name === prOpenPoSelectedCompany ? ' selected' : ''}>${escapeHtml(company.name)}</option>
-            `).join('')}
-          </select>
-        </div>
         <div class="field-group field-group-full">
           <label for="pr-po-note">หมายเหตุ</label>
           <input type="text" id="pr-po-note" placeholder="เช่น รอบสั่งซื้อประจำเดือน / บริษัทที่เกี่ยวข้อง" />
@@ -854,7 +899,7 @@ function renderOpenPoPanel() {
       <div class="products-header">
         <div>
           <span>รายการสินค้าใน PO</span>
-          <small>${selectedRecord ? 'เลือกสินค้าเฉพาะจาก PR ที่อ้างอิง และกรอกจำนวนกับราคารวม' : 'เลือก PR ที่อนุมัติแล้วก่อนเพิ่มรายการสินค้า'}</small>
+          <small>${selectedRecord ? 'ระบบดึงรายการจาก PR ที่เลือกมาให้แล้ว กรอกจำนวนหน่วยและราคารวม' : 'เลือก PR ที่อนุมัติแล้วก่อนเพิ่มรายการสินค้า'}</small>
         </div>
         <button class="btn-add-row transfer" type="button" data-add-pr-po-row ${selectedRecord ? '' : 'disabled'}>+ เพิ่มรายการ</button>
       </div>
@@ -897,6 +942,24 @@ function getSelectedApprovedPrForPo(approvedRecords = prApprovalRecords.filter(i
   return approvedRecords.find((record) => record.po_id === prOpenPoSelectedPrId) || null;
 }
 
+function ensurePrOpenPoRowsFromSelectedRecord(record) {
+  if (!record) {
+    prOpenPoRows = [];
+    return;
+  }
+
+  if (prOpenPoRows.length) return;
+
+  prOpenPoRows = (record.items || [])
+    .map((item, index) => ({
+      id: `po-row-${record.po_id || 'pr'}-${index}-${Math.random().toString(16).slice(2)}`,
+      itemIndex: String(index),
+      qty: String(Number(item.qty || 0) || ''),
+      unitQty: '',
+      total: '',
+    }));
+}
+
 function getPrPoStockLocations() {
   if (typeof getPickStockLocations === 'function') {
     return getPickStockLocations();
@@ -921,12 +984,6 @@ function bindPrOpenPoPanel(panel) {
     prOpenPoSelectedCompany = '';
     prOpenPoRows = [];
     renderOpenPoPanel();
-  });
-
-  panel.querySelector('[data-pr-open-po-company]')?.addEventListener('change', (event) => {
-    prOpenPoSelectedCompany = event.target.value;
-    prOpenPoRows = [];
-    addPrOpenPoRow();
   });
 
   panel.querySelector('[data-add-pr-po-row]')?.addEventListener('click', addPrOpenPoRow);
@@ -1000,7 +1057,7 @@ function renderPrOpenPoRows(record) {
   }
 
   if (!prOpenPoRows.length) {
-    return '<div class="empty-state">กดเพิ่มรายการเพื่อเลือกสินค้าจาก PR นี้</div>';
+    return '<div class="empty-state">PR นี้ไม่มีรายการสินค้า</div>';
   }
 
   return prOpenPoRows.map((row) => renderPrOpenPoRow(row, record)).join('');
@@ -1028,12 +1085,12 @@ function renderPrOpenPoRow(row, record) {
         ${options}
       </select>
       <div class="qty-input-with-unit">
-        <input type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(row.qty)}" data-pr-po-qty />
+        <input type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(row.qty)}" data-pr-po-qty />
         <span>${escapeHtml(unit || 'หน่วย')}</span>
       </div>
-      <input type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(row.unitQty || '')}" data-pr-po-unit-qty />
+      <input type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(row.unitQty || '')}" data-pr-po-unit-qty />
       <span class="pr-unit-price">${unitPrice ? formatPrCurrency(unitPrice) : '0.00'}</span>
-      <input type="number" min="0" step="0.01" inputmode="decimal" value="${escapeHtml(row.total)}" data-pr-po-line-total />
+      <input type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(row.total)}" data-pr-po-line-total />
       <button class="btn-remove-row" type="button" data-remove-pr-po-row="${escapeHtml(row.id)}" aria-label="ลบรายการ">×</button>
     </div>
   `;
@@ -1243,78 +1300,659 @@ function renderAddDataPanel() {
       </div>
     </div>
 
-    <div class="pr-layout">
+    <div class="pr-layout pr-add-data-layout">
       <section class="pr-main-card">
         <div class="pr-card-head">
           <div>
-            <h3>สินค้า</h3>
-            <p>เพิ่มชื่อสินค้า Location จำนวน และหน่วย</p>
+            <h3>บริษัทและสินค้า</h3>
+            <p>เพิ่มข้อมูลบริษัทผู้ขายก่อน แล้วผูกสินค้าเข้ากับบริษัทนั้น</p>
+          </div>
+          <button class="btn-add-row" type="button">แก้ไข</button>
+        </div>
+
+        <div class="pr-add-data-section">
+          <div class="pr-add-data-section-head">
+            <h4>บริษัทผู้ขาย</h4>
+            <span>ข้อมูลสำหรับเปิด PO และส่งเอกสารให้บริษัท</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="field-group field-group-full">
+              <label>ชื่อบริษัท</label>
+              <input id="add-data-vendor-name" type="text" placeholder="กรอกชื่อบริษัท" />
+            </div>
+            <div class="field-group field-group-full">
+              <label>ที่อยู่ 1</label>
+              <input id="add-data-vendor-address-1" type="text" placeholder="ที่อยู่บรรทัดที่ 1" />
+            </div>
+            <div class="field-group field-group-full">
+              <label>ที่อยู่ 2</label>
+              <input id="add-data-vendor-address-2" type="text" placeholder="ที่อยู่บรรทัดที่ 2" />
+            </div>
+            <div class="field-group">
+              <label>เบอร์โทร</label>
+              <input id="add-data-vendor-phone" type="tel" placeholder="เบอร์โทร" />
+            </div>
+            <div class="field-group">
+              <label>E-mail</label>
+              <input id="add-data-vendor-email" type="email" placeholder="email@example.com" />
+            </div>
           </div>
         </div>
+
+        <div class="pr-add-data-section">
+          <div class="pr-add-data-section-head">
+            <h4>สินค้า</h4>
+            <span>รายการสินค้าและสต็อกเริ่มต้นที่ผูกกับบริษัทนี้</span>
+          </div>
+
         <div class="form-grid">
           <div class="field-group field-group-full">
             <label>ชื่อสินค้า</label>
-            <input type="text" placeholder="กรอกชื่อสินค้า" />
+            <input id="add-data-product-name" type="text" placeholder="กรอกชื่อสินค้า" />
+          </div>
+          <div class="field-group field-group-full">
+            <label>รายการสินค้าของบริษัท</label>
+            <select id="add-data-product-select">
+              <option value="">— เลือกสินค้าจาก Stock —</option>
+              ${typeof getProductOptions === 'function' ? getProductOptions() : ''}
+            </select>
           </div>
           <div class="field-group field-group-full">
             <label>Location</label>
             <div class="pr-check-grid">
               ${['Hub Admin', 'สต็อกใหญ่', 'ไตบน', 'ไตล่าง', 'ไตดี'].map((center) => `
-                <label><input type="checkbox" /> ${escapeHtml(center)}</label>
+                <label class="pr-location-check">
+                  <input type="checkbox" value="${escapeHtml(center)}" data-add-data-location />
+                  <span class="pr-location-check-box" aria-hidden="true"></span>
+                  <span class="pr-location-check-text">${escapeHtml(center)}</span>
+                </label>
               `).join('')}
             </div>
           </div>
-          <div class="field-group">
-            <label>จำนวน</label>
-            <input type="number" placeholder="จำนวน" />
+          <div class="field-group field-group-full">
+            <label>สต็อกเดิม</label>
+            <div class="pr-stock-qty-grid">
+              ${['Hub Admin', 'สต็อกใหญ่', 'ไตบน', 'ไตล่าง', 'ไตดี'].map((center) => `
+                <label class="pr-stock-qty-box">
+                  <span>${escapeHtml(center)}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    inputmode="decimal"
+                    placeholder="0"
+                    data-add-data-current-stock-qty="${escapeHtml(center)}"
+                  />
+                </label>
+              `).join('')}
+            </div>
           </div>
-          <div class="field-group">
-            <label>หน่วย</label>
-            <input type="text" placeholder="เช่น แกลลอน / ลัง / ชิ้น" />
+          <div class="field-group field-group-full">
+            <label>เพิ่มสต็อกใหม่</label>
+            <div class="pr-stock-qty-grid">
+              ${['Hub Admin', 'สต็อกใหญ่', 'ไตบน', 'ไตล่าง', 'ไตดี'].map((center) => `
+                <label class="pr-stock-qty-box">
+                  <span>${escapeHtml(center)}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    inputmode="decimal"
+                    placeholder="0"
+                    data-add-data-stock-qty="${escapeHtml(center)}"
+                  />
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <div class="field-group field-group-full">
+            <label>Cost สินค้า</label>
+            <div class="pr-add-data-cost-row">
+              <input id="add-data-cost-qty" type="number" min="0" step="0.001" inputmode="decimal" placeholder="จำนวน" />
+              <input id="add-data-cost-unit-qty" type="number" min="0" step="0.001" inputmode="decimal" placeholder="จำนวนชิ้น" />
+              <input id="add-data-cost-unit-price" type="text" inputmode="decimal" placeholder="ราคาต่อชิ้น" />
+              <input id="add-data-cost-total-price" type="text" inputmode="decimal" placeholder="ราคารวม" />
+              <input id="add-data-product-unit" type="text" placeholder="หน่วย เช่น แกลลอน / ลัง / ชิ้น" />
+            </div>
           </div>
         </div>
-      </section>
+        </div>
 
-      <section class="pr-main-card">
-        <div class="pr-card-head">
-          <div>
-            <h3>บริษัท</h3>
-            <p>เพิ่มหรือเตรียมแก้ไขข้อมูลบริษัท</p>
-          </div>
-          <button class="btn-add-row" type="button">แก้ไข</button>
-        </div>
-        <div class="form-grid">
-          <div class="field-group field-group-full">
-            <label>ชื่อบริษัท</label>
-            <input type="text" placeholder="กรอกชื่อบริษัท" />
-          </div>
-          <div class="field-group field-group-full">
-            <label>ที่อยู่ 1</label>
-            <input type="text" placeholder="ที่อยู่บรรทัดที่ 1" />
-          </div>
-          <div class="field-group field-group-full">
-            <label>ที่อยู่ 2</label>
-            <input type="text" placeholder="ที่อยู่บรรทัดที่ 2" />
-          </div>
-          <div class="field-group">
-            <label>เบอร์โทร</label>
-            <input type="tel" placeholder="เบอร์โทร" />
-          </div>
-          <div class="field-group">
-            <label>E-mail</label>
-            <input type="email" placeholder="email@example.com" />
-          </div>
-          <div class="field-group field-group-full">
-            <label>รายการสินค้าของบริษัท</label>
-            <select>
-              <option>— เลือกสินค้าจาก Stock —</option>
-              ${PR_COMPANIES.flatMap((company) => company.items).map((item) => `<option>${escapeHtml(item)}</option>`).join('')}
-            </select>
-          </div>
+        <div class="pr-add-data-actions">
+          <button class="btn-submit" type="button" onclick="saveAddDataVendorProduct(this)">
+            บันทึกข้อมูล
+          </button>
         </div>
       </section>
     </div>
   `;
+
+  const productSelect = document.getElementById('add-data-product-select');
+  if (productSelect) {
+    enhanceAddDataProductSelect(productSelect);
+  }
+
+  enhanceAddDataLocationChecks();
+  enhanceAddDataStockQtyInputs();
+  enhanceAddDataCostInputs();
+  bindAddDataProductDetailEvents(productSelect);
+}
+
+function enhanceAddDataLocationChecks() {
+  document.querySelectorAll('[data-add-data-location]').forEach((input) => {
+    const label = input.closest('.pr-location-check');
+    const syncCheckedState = () => {
+      label?.classList.toggle('is-checked', input.checked);
+    };
+
+    input.addEventListener('change', syncCheckedState);
+    syncCheckedState();
+  });
+}
+
+function getAddDataStockQtyInput(center) {
+  return document.querySelector(`[data-add-data-stock-qty="${CSS.escape(center)}"]`);
+}
+
+function getAddDataCurrentStockQtyInput(center) {
+  return document.querySelector(`[data-add-data-current-stock-qty="${CSS.escape(center)}"]`);
+}
+
+function syncAddDataLocationFromQty(center, qtyValue) {
+  const qty = Number(qtyValue);
+  if (!center || !Number.isFinite(qty) || qty <= 0) return;
+
+  const checkbox = Array.from(document.querySelectorAll('[data-add-data-location]'))
+    .find((input) => input.value === center);
+
+  if (checkbox && !checkbox.checked) {
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+}
+
+function enhanceAddDataStockQtyInputs() {
+  document.querySelectorAll('[data-add-data-stock-qty]').forEach((input) => {
+    input.addEventListener('input', () => {
+      syncAddDataLocationFromQty(input.dataset.addDataStockQty || '', input.value);
+    });
+  });
+}
+
+function parseAddDataDecimal(value) {
+  const cleaned = String(value ?? '').trim().replace(/,/g, '.');
+  if (!cleaned) return 0;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function getAddDataCostValues() {
+  const qty = Number(document.getElementById('add-data-cost-qty')?.value || 0);
+  const unitQty = Number(document.getElementById('add-data-cost-unit-qty')?.value || 0);
+  const unitPrice = parseAddDataDecimal(document.getElementById('add-data-cost-unit-price')?.value);
+  const totalPrice = parseAddDataDecimal(document.getElementById('add-data-cost-total-price')?.value);
+  return {
+    qty: Number.isFinite(qty) ? qty : 0,
+    unitQty: Number.isFinite(unitQty) ? unitQty : 0,
+    unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+    totalPrice: Number.isFinite(totalPrice) ? totalPrice : 0,
+  };
+}
+
+function refreshAddDataCostCalculation(changedField = '') {
+  const qtyInput = document.getElementById('add-data-cost-qty');
+  const unitQtyInput = document.getElementById('add-data-cost-unit-qty');
+  const unitPriceInput = document.getElementById('add-data-cost-unit-price');
+  const totalPriceInput = document.getElementById('add-data-cost-total-price');
+  if (!qtyInput || !unitQtyInput || !unitPriceInput || !totalPriceInput) return;
+
+  const qty = Number(qtyInput.value || 0);
+  const unitQty = Number(unitQtyInput.value || 0);
+  const unitPrice = parseAddDataDecimal(unitPriceInput.value);
+  const totalPrice = parseAddDataDecimal(totalPriceInput.value);
+  const totalUnitQty = qty * unitQty;
+
+  if (changedField === 'total' && totalUnitQty > 0 && totalPrice >= 0) {
+    unitPriceInput.value = totalPrice ? (totalPrice / totalUnitQty).toFixed(2) : '';
+    return;
+  }
+
+  if ((changedField === 'qty' || changedField === 'unitQty' || changedField === 'unitPrice') && totalUnitQty > 0 && unitPrice >= 0) {
+    totalPriceInput.value = unitPrice ? (totalUnitQty * unitPrice).toFixed(2) : '';
+  }
+}
+
+function enhanceAddDataCostInputs() {
+  document.getElementById('add-data-cost-qty')?.addEventListener('input', () => {
+    refreshAddDataCostCalculation('qty');
+  });
+  document.getElementById('add-data-cost-unit-qty')?.addEventListener('input', () => {
+    refreshAddDataCostCalculation('unitQty');
+  });
+  document.getElementById('add-data-cost-unit-price')?.addEventListener('input', () => {
+    refreshAddDataCostCalculation('unitPrice');
+  });
+  document.getElementById('add-data-cost-total-price')?.addEventListener('input', () => {
+    refreshAddDataCostCalculation('total');
+  });
+}
+
+function enhanceAddDataProductSelect(select) {
+  if (!select || select.tomselect) return;
+
+  if (typeof shouldUseNativeSelectOnAndroid === 'function' && shouldUseNativeSelectOnAndroid()) {
+    select.classList.add('native-android-select');
+    return;
+  }
+
+  const ts = new TomSelect(select, {
+    create: false,
+    allowEmptyOption: true,
+    maxOptions: 50,
+    dropdownParent: 'body',
+    placeholder: '— เลือกสินค้าจาก Stock —',
+    plugins: {
+      clear_button: {
+        title: 'ล้างรายการสินค้า',
+      },
+    },
+    onDropdownOpen: function () {
+      if (typeof positionTomSelectDropdown === 'function') {
+        positionTomSelectDropdown(this);
+      }
+    },
+    onChange: function (value) {
+      handleAddDataProductSelection(value);
+    },
+  });
+
+  ts.wrapper.classList.add('stock-product-filter-select', 'add-data-product-filter-select');
+  ts.control_input.setAttribute('placeholder', '— เลือกสินค้าจาก Stock —');
+}
+
+function bindAddDataProductDetailEvents(select) {
+  if (!select) return;
+  select.addEventListener('change', () => {
+    handleAddDataProductSelection(select.value);
+  });
+}
+
+function setAddDataFieldValue(id, value) {
+  const input = document.getElementById(id);
+  if (!input) return;
+  input.value = value === undefined || value === null ? '' : String(value).trim();
+}
+
+function resetAddDataForm() {
+  [
+    'add-data-vendor-name',
+    'add-data-vendor-address-1',
+    'add-data-vendor-address-2',
+    'add-data-vendor-phone',
+    'add-data-vendor-email',
+    'add-data-product-name',
+    'add-data-product-unit',
+    'add-data-cost-qty',
+    'add-data-cost-unit-qty',
+    'add-data-cost-unit-price',
+    'add-data-cost-total-price',
+  ].forEach((id) => setAddDataFieldValue(id, ''));
+
+  const productSelect = document.getElementById('add-data-product-select');
+  if (productSelect) {
+    if (productSelect.tomselect) {
+      productSelect.tomselect.clear(true);
+    }
+    productSelect.value = '';
+  }
+
+  document.querySelectorAll('[data-add-data-location]').forEach((input) => {
+    input.checked = false;
+    input.closest('.pr-location-check')?.classList.remove('is-checked');
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  document.querySelectorAll('[data-add-data-stock-qty], [data-add-data-current-stock-qty]').forEach((input) => {
+    input.value = '';
+  });
+}
+
+function getAddDataExistingStockCenters(product) {
+  if (!product || typeof localStock === 'undefined') return [];
+
+  const normalizedProduct = typeof normalizeProductKey === 'function'
+    ? normalizeProductKey(product)
+    : String(product || '').trim().toLowerCase();
+
+  return getPrPoStockLocations().filter((center) => {
+    const stock = localStock?.[center] || {};
+    return Object.keys(stock).some((stockProduct) => {
+      const normalizedStockProduct = typeof normalizeProductKey === 'function'
+        ? normalizeProductKey(stockProduct)
+        : String(stockProduct || '').trim().toLowerCase();
+      return normalizedStockProduct === normalizedProduct;
+    });
+  });
+}
+
+function parseAddDataLocationList(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function setAddDataLocationChecks(locations) {
+  const selected = new Set((locations || []).map((item) => (
+    typeof normalizeCenterName === 'function' ? normalizeCenterName(item) : item
+  )));
+
+  document.querySelectorAll('[data-add-data-location]').forEach((input) => {
+    const center = typeof normalizeCenterName === 'function'
+      ? normalizeCenterName(input.value)
+      : input.value;
+    input.checked = selected.has(center);
+    input.closest('.pr-location-check')?.classList.toggle('is-checked', input.checked);
+  });
+}
+
+function getAddDataStockQtyMap(product) {
+  const qtyMap = {};
+  getPrPoStockLocations().forEach((center) => {
+    qtyMap[center] = typeof getStockQty === 'function'
+      ? getStockQty(center, product)
+      : Number(localStock?.[center]?.[product] || 0);
+  });
+  return qtyMap;
+}
+
+function getAddDataProductKey(value) {
+  if (typeof normalizeStockProductKeyForLoad === 'function') {
+    return normalizeStockProductKeyForLoad(value);
+  }
+  if (typeof normalizeProductKey === 'function') {
+    return normalizeProductKey(value);
+  }
+  return String(value || '')
+    .normalize('NFC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+async function fetchAddDataStockRows(product) {
+  if (!product || typeof supabaseClient === 'undefined') return null;
+
+  try {
+    const { data, error } = await supabaseClient.rpc('get_stock_items');
+
+    if (error) throw error;
+
+    const targetProduct = getAddDataProductKey(product);
+    const allowedCenters = new Set(getPrPoStockLocations().map((center) => (
+      typeof normalizeCenterName === 'function' ? normalizeCenterName(center) : center
+    )));
+
+    return (data || []).filter((row) => {
+      const center = typeof normalizeCenterName === 'function'
+        ? normalizeCenterName(row.center)
+        : row.center;
+      return allowedCenters.has(center) && getAddDataProductKey(row.product) === targetProduct;
+    });
+  } catch (error) {
+    console.warn('Load add data stock rows failed:', error);
+    return null;
+  }
+}
+
+function getAddDataStockCentersFromRows(rows) {
+  return [...new Set((rows || [])
+    .map((row) => (typeof normalizeCenterName === 'function' ? normalizeCenterName(row.center) : row.center))
+    .filter(Boolean))];
+}
+
+function getAddDataStockQtyMapFromRows(rows) {
+  const qtyMap = {};
+  getPrPoStockLocations().forEach((center) => {
+    qtyMap[center] = 0;
+  });
+
+  (rows || []).forEach((row) => {
+    const center = typeof normalizeCenterName === 'function'
+      ? normalizeCenterName(row.center)
+      : row.center;
+    if (!center) return;
+    qtyMap[center] = Number(qtyMap[center] || 0) + (Number(row.qty) || 0);
+  });
+
+  return qtyMap;
+}
+
+function setAddDataStockQtyInputs(qtyMap = {}) {
+  getPrPoStockLocations().forEach((center) => {
+    const input = getAddDataCurrentStockQtyInput(center);
+    if (!input) return;
+
+    const qty = Number(qtyMap[center] || 0);
+    input.value = Number.isFinite(qty) ? String(qty) : '0';
+  });
+
+  document.querySelectorAll('[data-add-data-stock-qty]').forEach((input) => {
+    input.value = '';
+  });
+}
+
+function getAddDataSelectedStockQtyMap() {
+  const qtyMap = {};
+
+  document.querySelectorAll('[data-add-data-stock-qty]').forEach((input) => {
+    const center = input.dataset.addDataStockQty || '';
+    const qtyText = input.value;
+    const qty = qtyText === '' || qtyText === undefined || qtyText === null ? 0 : Number(qtyText);
+    qtyMap[center] = qty;
+  });
+
+  return qtyMap;
+}
+
+function getAddDataSetStockQtyMap() {
+  const qtyMap = {};
+
+  document.querySelectorAll('[data-add-data-current-stock-qty]').forEach((input) => {
+    const center = input.dataset.addDataCurrentStockQty || '';
+    const qtyText = input.value;
+    const qty = qtyText === '' || qtyText === undefined || qtyText === null ? 0 : Number(qtyText);
+    qtyMap[center] = qty;
+  });
+
+  return qtyMap;
+}
+
+async function fetchAddDataProductVendorMeta(product) {
+  if (!product || typeof supabaseClient === 'undefined') return null;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('vendor_products')
+      .select('unit, default_location, cost_qty, cost_unit_qty, cost_unit_price, cost_total_price, cost_unit, vendors(vendor_name, address_1, address_2, phone, email)')
+      .eq('product', product)
+      .eq('is_active', true)
+      .limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!row) return null;
+
+    const vendor = Array.isArray(row.vendors) ? row.vendors[0] : row.vendors;
+    return {
+      vendorName: vendor?.vendor_name || '',
+      address1: vendor?.address_1 || '',
+      address2: vendor?.address_2 || '',
+      phone: vendor?.phone || '',
+      email: vendor?.email || '',
+      unit: row.unit || '',
+      costQty: row.cost_qty ?? '',
+      costUnitQty: row.cost_unit_qty ?? '',
+      costUnitPrice: row.cost_unit_price ?? '',
+      costTotalPrice: row.cost_total_price ?? '',
+      costUnit: row.cost_unit || '',
+      locations: parseAddDataLocationList(row.default_location),
+    };
+  } catch (error) {
+    console.warn('Load vendor product meta failed:', error);
+    return null;
+  }
+}
+
+async function handleAddDataProductSelection(product) {
+  const selectedProduct = String(product || '').trim();
+  if (!selectedProduct) return;
+
+  const meta = await fetchAddDataProductVendorMeta(selectedProduct);
+  const fallbackCompany = typeof getPrCompanyNameForProduct === 'function'
+    ? getPrCompanyNameForProduct(selectedProduct)
+    : '';
+  const stockUnit = typeof getStockUnit === 'function' ? getStockUnit('', selectedProduct) : '';
+  const stockRows = await fetchAddDataStockRows(selectedProduct);
+  const stockLocations = stockRows
+    ? getAddDataStockCentersFromRows(stockRows)
+    : getAddDataExistingStockCenters(selectedProduct);
+  const stockQtyMap = stockRows
+    ? getAddDataStockQtyMapFromRows(stockRows)
+    : getAddDataStockQtyMap(selectedProduct);
+
+  setAddDataFieldValue('add-data-vendor-name', meta?.vendorName || (fallbackCompany && fallbackCompany !== 'ทั่วไป' ? fallbackCompany : ''));
+  setAddDataFieldValue('add-data-vendor-address-1', meta?.address1 || '');
+  setAddDataFieldValue('add-data-vendor-address-2', meta?.address2 || '');
+  setAddDataFieldValue('add-data-vendor-phone', meta?.phone || '');
+  setAddDataFieldValue('add-data-vendor-email', meta?.email || '');
+  setAddDataFieldValue('add-data-product-unit', meta?.unit || stockUnit);
+  setAddDataFieldValue('add-data-cost-qty', meta?.costQty || '');
+  setAddDataFieldValue('add-data-cost-unit-qty', meta?.costUnitQty || '');
+  setAddDataFieldValue('add-data-cost-unit-price', meta?.costUnitPrice || '');
+  setAddDataFieldValue('add-data-cost-total-price', meta?.costTotalPrice || '');
+  if (meta?.costUnit && !document.getElementById('add-data-product-unit')?.value) {
+    setAddDataFieldValue('add-data-product-unit', meta.costUnit);
+  }
+
+  setAddDataLocationChecks(stockLocations);
+  setAddDataStockQtyInputs(stockQtyMap);
+  refreshAddDataCostCalculation('total');
+}
+
+async function saveAddDataVendorProduct(button) {
+  const vendorName = document.getElementById('add-data-vendor-name')?.value.trim() || 'ไม่ระบุบริษัท';
+  const productInput = document.getElementById('add-data-product-name')?.value.trim() || '';
+  const productSelect = document.getElementById('add-data-product-select')?.value.trim() || '';
+  const product = productInput || productSelect;
+  const unitInput = document.getElementById('add-data-product-unit')?.value.trim() || '';
+  const unit = unitInput || (typeof getStockUnit === 'function' ? getStockUnit('', product) : '');
+  const costValues = getAddDataCostValues();
+  const stockQtyMap = getAddDataSelectedStockQtyMap();
+  const setStockQtyMap = getAddDataSetStockQtyMap();
+  const locations = Array.from(document.querySelectorAll('[data-add-data-location]:checked'))
+    .map((input) => input.value)
+    .filter(Boolean);
+  const selectedStockQtyMap = locations.reduce((map, center) => ({
+    ...map,
+    [center]: stockQtyMap[center] || 0,
+  }), {});
+  const selectedSetStockQtyMap = locations.reduce((map, center) => ({
+    ...map,
+    [center]: setStockQtyMap[center] || 0,
+  }), {});
+
+  if (!product) {
+    showToast('⚠️ กรุณากรอกหรือเลือกรายการสินค้า', 'error');
+    return;
+  }
+
+  if (!locations.length) {
+    showToast('⚠️ กรุณาเลือกสต็อกที่จะบันทึกสินค้า', 'error');
+    return;
+  }
+
+  const invalidQtyCenter = Object.entries(selectedStockQtyMap)
+    .find(([, qty]) => !Number.isFinite(Number(qty)) || Number(qty) < 0);
+  if (invalidQtyCenter) {
+    showToast(`⚠️ กรุณาระบุจำนวนของ ${invalidQtyCenter[0]} เป็นตัวเลข 0 หรือมากกว่า`, 'error');
+    return;
+  }
+
+  const invalidSetQtyCenter = Object.entries(selectedSetStockQtyMap)
+    .find(([, qty]) => !Number.isFinite(Number(qty)) || Number(qty) < 0);
+  if (invalidSetQtyCenter) {
+    showToast(`⚠️ กรุณาระบุสต็อกเดิมของ ${invalidSetQtyCenter[0]} เป็นตัวเลข 0 หรือมากกว่า`, 'error');
+    return;
+  }
+
+  if ([costValues.qty, costValues.unitQty, costValues.unitPrice, costValues.totalPrice].some((value) => !Number.isFinite(value) || value < 0)) {
+    showToast('⚠️ กรุณาระบุข้อมูล Cost เป็นตัวเลข 0 หรือมากกว่า', 'error');
+    return;
+  }
+
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
+
+  showToast('', 'loading', 'กำลังบันทึกข้อมูลบริษัทและสินค้า...');
+
+  try {
+    const saveParams = {
+      p_vendor_name: vendorName,
+      p_address_1: document.getElementById('add-data-vendor-address-1')?.value.trim() || '',
+      p_address_2: document.getElementById('add-data-vendor-address-2')?.value.trim() || '',
+      p_phone: document.getElementById('add-data-vendor-phone')?.value.trim() || '',
+      p_email: document.getElementById('add-data-vendor-email')?.value.trim() || '',
+      p_product: product,
+      p_unit: unit,
+      p_default_location: locations.join(', '),
+      p_locations: locations,
+      p_qty: 0,
+      p_stock_qtys: selectedStockQtyMap,
+      p_set_stock_qtys: selectedSetStockQtyMap,
+      p_cost_qty: costValues.qty,
+      p_cost_unit_qty: costValues.unitQty,
+      p_cost_unit_price: costValues.unitPrice,
+      p_cost_total_price: costValues.totalPrice,
+      p_cost_unit: unit,
+    };
+
+    let { data, error } = await supabaseClient.rpc('save_vendor_product', saveParams);
+
+    if (error && typeof isRpcSignatureError === 'function' && isRpcSignatureError(error)) {
+      const { p_set_stock_qtys, ...fallbackParams } = saveParams;
+      const fallback = await supabaseClient.rpc('save_vendor_product', fallbackParams);
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'บันทึกข้อมูลไม่สำเร็จ');
+    }
+
+    showToast(`✅ ${data.message || 'บันทึกข้อมูลเรียบร้อย'}`, 'success');
+    prVendorProductCompanyLoaded = false;
+    prVendorProductCompanyMap = new Map();
+    resetAddDataForm();
+    if (typeof fetchStock === 'function') {
+      await fetchStock();
+    }
+  } catch (error) {
+    console.error('save_vendor_product error:', error);
+    showToast(`❌ ${error.message || 'บันทึกข้อมูลไม่สำเร็จ'}`, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 function renderExportDataPanel() {
