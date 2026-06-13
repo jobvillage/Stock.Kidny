@@ -142,6 +142,7 @@ async function submitTransfer() {
       }
     }
 
+    await fetchTransferTransactionHistory();
   } catch (error) {
     console.error('Supabase transfer error:', error);
     showToast(`❌ ${error.message || 'สร้าง Transfer ไม่สำเร็จ'}`, 'error');
@@ -183,21 +184,110 @@ function buildPoEmailPayload(po) {
   };
 }
 
-async function sendPoEmail(poId, button) {
-  const po = window.currentPoStatusList?.find((item) => item.po_id === poId);
+function getPrOpenRecordById(prId) {
+  return (window.currentPrOpenPendingList || []).find((item) => item.po_id === prId)
+    || (window.currentPrOpenHistoryList || []).find((item) => item.po_id === prId)
+    || null;
+}
 
-  if (!po) {
+function getEmailDocumentById(documentId) {
+  return (window.currentPoStatusList || []).find((item) => item.po_id === documentId)
+    || getPrOpenRecordById(documentId)
+    || null;
+}
+
+async function sendPrApprovalRequest(prId, button) {
+  const record = getPrOpenRecordById(prId);
+
+  if (!record) {
     showToast('❌ ไม่พบข้อมูล PR นี้', 'error');
     return;
   }
 
   if (!PO_EMAIL_WEB_APP_URL) {
-    showToast('⚠️ ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งอีเมล PR', 'error');
+    showToast('⚠️ ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งรายการขออนุมัติ PR', 'error');
     return;
   }
 
-  const targetButton = button || document.querySelector(`[data-email-po-id="${CSS.escape(poId)}"]`);
+  const targetButton = button || document.querySelector(`[data-send-pr-approval-id="${CSS.escape(prId)}"]`);
   if (targetButton?.disabled) return;
+
+  if (targetButton) {
+    targetButton.disabled = true;
+    targetButton.classList.add('is-sending');
+    targetButton.innerHTML = '<span>📨</span><span>กำลังส่ง...</span>';
+  }
+
+  showToast('', 'loading', 'กำลังส่งรายการขออนุมัติ PR...');
+
+  try {
+    const submitResult = await supabaseClient.rpc('submit_pr_request_for_approval', {
+      p_pr_id: prId,
+      p_staff_code: currentUser?.code || '',
+      p_staff_name: currentUser?.name || currentUser?.code || '',
+    });
+
+    if (submitResult.error) {
+      throw submitResult.error;
+    }
+
+    if (submitResult.data && submitResult.data.success !== true) {
+      throw new Error(submitResult.data.message || 'ส่งรายการขออนุมัติ PR ไม่สำเร็จ');
+    }
+
+    await sendPoEmail(prId, null, {
+      silent: true,
+      document: {
+        ...record,
+        status: 'pr_pending_approval',
+      },
+    });
+
+    if (targetButton) {
+      targetButton.innerHTML = '<span>📨</span><span>ส่งรายการอีกครั้ง</span>';
+      targetButton.classList.add('is-sent');
+    }
+
+    showToast('✅ ส่งรายการขออนุมัติ PR แล้ว', 'success');
+    await fetchPrOpenPending();
+
+    if (Array.isArray(window.currentPrOpenHistoryList)) {
+      await fetchPrOpenHistory();
+    }
+  } catch (error) {
+    console.error('send_pr_approval_request error:', error);
+    if (targetButton) {
+      targetButton.innerHTML = '<span>📨</span><span>ส่งรายการขออนุมัติ PR</span>';
+    }
+    showToast(`❌ ${error.message || 'ส่งรายการขออนุมัติ PR ไม่สำเร็จ'}`, 'error');
+  } finally {
+    if (targetButton) {
+      targetButton.disabled = false;
+      targetButton.classList.remove('is-sending');
+    }
+  }
+}
+
+window.sendPrApprovalRequest = sendPrApprovalRequest;
+
+async function sendPoEmail(poId, button, options = {}) {
+  const po = options.document || getEmailDocumentById(poId);
+  const silent = options.silent === true;
+
+  if (!po) {
+    if (!silent) showToast('❌ ไม่พบข้อมูล PR นี้', 'error');
+    if (!silent) return false;
+    throw new Error('ไม่พบข้อมูล PR นี้');
+  }
+
+  if (!PO_EMAIL_WEB_APP_URL) {
+    if (!silent) showToast('⚠️ ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งอีเมล PR', 'error');
+    if (!silent) return false;
+    throw new Error('ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งอีเมล PR');
+  }
+
+  const targetButton = button || document.querySelector(`[data-email-po-id="${CSS.escape(poId)}"]`);
+  if (targetButton?.disabled) return false;
 
   if (targetButton) {
     targetButton.disabled = true;
@@ -205,7 +295,9 @@ async function sendPoEmail(poId, button) {
     targetButton.innerHTML = '<span>📧</span><span>กำลังส่ง...</span>';
   }
 
-  showToast('', 'loading', 'กำลังส่งอีเมล PR...');
+  if (!silent) {
+    showToast('', 'loading', 'กำลังส่งอีเมล PR...');
+  }
 
   try {
     await fetch(PO_EMAIL_WEB_APP_URL, {
@@ -222,13 +314,20 @@ async function sendPoEmail(poId, button) {
       targetButton.classList.add('is-sent');
     }
 
-    showToast('✅ ส่งคำขออีเมล PR แล้ว', 'success');
+    if (!silent) {
+      showToast('✅ ส่งคำขออีเมล PR แล้ว', 'success');
+    }
+    return true;
   } catch (error) {
     console.error('send_po_email error:', error);
     if (targetButton) {
       targetButton.innerHTML = '<span>📧</span><span>ส่งอีเมล PR</span>';
     }
-    showToast(`❌ ${error.message || 'ส่งอีเมล PR ไม่สำเร็จ'}`, 'error');
+    if (!silent) {
+      showToast(`❌ ${error.message || 'ส่งอีเมล PR ไม่สำเร็จ'}`, 'error');
+    }
+    if (!silent) return false;
+    throw error;
   } finally {
     if (targetButton) {
       targetButton.disabled = false;
@@ -1275,6 +1374,7 @@ async function transferRequestItemsToCenter(requestId) {
 
     showToast(`✅ Transfer ไปพักที่ ${targetCenter} เรียบร้อย`, 'success');
     if (box) box.hidden = true;
+    await fetchTransferTransactionHistory();
 
   } catch (error) {
     console.error('transferRequestItemsToCenter error:', error);
@@ -1609,6 +1709,22 @@ function renderPoCmoForm() {
 
     <div class="section-divider"></div>
 
+    <section class="pr-history-panel pr-pending-panel">
+      <div class="panel-title compact-title">
+        <span class="title-icon">📌</span>
+        <div>
+          <h2>PR ที่บันทึกแล้ว</h2>
+          <p>รายการที่ยังรอส่งหรือรออนุมัติ สามารถแก้ไขก่อนอนุมัติได้</p>
+        </div>
+      </div>
+
+      <div id="pr-pending-list" class="request-history-list">
+        <div class="empty-state">กำลังโหลด PR ที่รออนุมัติ...</div>
+      </div>
+    </section>
+
+    <div class="section-divider"></div>
+
     <section class="pr-history-panel">
       <div class="panel-title compact-title">
         <span class="title-icon">📄</span>
@@ -1649,7 +1765,7 @@ function renderPoCmoForm() {
       </button>
 
       <div id="pr-history-list" class="request-history-list">
-        <div class="empty-state">กำลังโหลด PR ที่รออนุมัติ...</div>
+        <div class="empty-state">เลือกตัวกรองแล้วกดเรียกดู PR ย้อนหลัง</div>
       </div>
     </section>
   `;
@@ -1666,25 +1782,44 @@ function renderPoCmoForm() {
   document.getElementById('btn-fetch-pr-history')?.addEventListener('click', fetchPrOpenHistory);
 
   addPoRow();
-  fetchPrOpenHistory({ autoPending: true });
+  fetchPrOpenPending();
 }
 
 function getPrOpenHistoryStatusText(status = '') {
   const normalized = String(status || '').toLowerCase();
+  if (normalized === 'pr_draft' || normalized === 'draft' || !normalized) return 'บันทึกแล้ว';
   if (normalized === 'pr_approved' || normalized === 'approved') return 'อนุมัติแล้ว';
   if (normalized === 'cancelled') return 'ยกเลิก';
   return 'รออนุมัติ';
 }
 
-function renderPrOpenHistoryCards(records = []) {
+function canEditPrOpenRecord(record) {
+  if (!record) return false;
+
+  const status = String(record.status || '').toLowerCase();
+  const isApproved = status === 'pr_approved'
+    || status === 'approved'
+    || Boolean(record.pr_daeng_approved_at && record.pr_toy_approved_at);
+  if (isApproved || status === 'cancelled') return false;
+
+  if (currentUser?.role === 'admin' || currentUser?.role === 'adminR') return true;
+  if (currentUser?.role !== 'center_staff') return false;
+
+  const sameCenter = !record.center || !currentUser?.center || record.center === currentUser.center;
+  const sameStaff = !record.staff_code || !currentUser?.code || record.staff_code === currentUser.code;
+  return sameCenter && sameStaff;
+}
+
+function renderPrOpenHistoryCards(records = [], options = {}) {
   if (!records.length) {
-    return '<div class="empty-state">ไม่พบ PR ย้อนหลังตามตัวกรอง</div>';
+    return `<div class="empty-state">${escapeHtml(options.emptyText || 'ไม่พบ PR ย้อนหลังตามตัวกรอง')}</div>`;
   }
 
   return records.map((record) => {
     const items = normalizeItems(record.items);
     const statusText = getPrOpenHistoryStatusText(record.status);
     const isApproved = statusText === 'อนุมัติแล้ว';
+    const showActions = options.showActions === true && canEditPrOpenRecord(record);
     const itemRows = items.map((item) => {
       const unit = String(item.unit || item.Unit || '').trim();
       return `
@@ -1697,7 +1832,7 @@ function renderPrOpenHistoryCards(records = []) {
     }).join('');
 
     return `
-      <article class="stock-request-card pr-history-card">
+      <article class="stock-request-card pr-history-card" data-pr-id="${escapeHtml(record.po_id || '')}">
         <div class="stock-request-head pr-history-head">
           <div>
             <span class="overview-label">เลข PR</span>
@@ -1739,22 +1874,77 @@ function renderPrOpenHistoryCards(records = []) {
             ${itemRows || '<div class="empty-state">ไม่มีรายการสินค้า</div>'}
           </div>
         </div>
+
+        ${showActions ? `
+          <div class="po-email-actions pr-request-actions">
+            <button
+              class="btn-po-edit"
+              type="button"
+              data-edit-pr-id="${escapeHtml(record.po_id || '')}"
+            >
+              ✎ แก้ไข
+            </button>
+
+            <button
+              class="btn-po-email"
+              type="button"
+              data-send-pr-approval-id="${escapeHtml(record.po_id || '')}"
+            >
+              <span>📨</span>
+              <span>ส่งรายการขออนุมัติ PR</span>
+            </button>
+          </div>
+        ` : ''}
       </article>
     `;
   }).join('');
 }
 
-async function fetchPrOpenHistory(options = {}) {
+async function fetchPrOpenPending() {
+  const box = document.getElementById('pr-pending-list');
+  if (!box) return;
+
+  box.innerHTML = '<div class="empty-state">กำลังโหลด PR ที่รออนุมัติ...</div>';
+
+  try {
+    const { data, error } = await supabaseClient.rpc('get_pr_approval_status');
+
+    if (error) {
+      throw error;
+    }
+
+    window.currentPrOpenPendingList = (data || [])
+      .filter((record) => String(record.po_id || '').toUpperCase().startsWith('PR-'))
+      .filter((record) => {
+        const status = String(record.status || '').toLowerCase();
+        return status === 'pr_draft' || status === 'draft' || !status;
+      })
+      .filter((record) => {
+        if (currentUser?.role !== 'center_staff' || !currentUser.center) return true;
+        return !record.center || record.center === currentUser.center;
+      })
+      .sort((a, b) => new Date(b.created_at || b.updated_at || 0) - new Date(a.created_at || a.updated_at || 0));
+
+    box.innerHTML = renderPrOpenHistoryCards(window.currentPrOpenPendingList, {
+      emptyText: 'ยังไม่มี PR ที่รออนุมัติ',
+      showActions: true,
+    });
+
+  } catch (error) {
+    console.error('fetchPrOpenPending error:', error);
+    box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลด PR ที่รออนุมัติไม่สำเร็จ')}</div>`;
+  }
+}
+
+async function fetchPrOpenHistory() {
   const box = document.getElementById('pr-history-list');
   if (!box) return;
 
-  const status = options.autoPending
-    ? 'pr_pending_approval'
-    : (document.getElementById('pr-history-status')?.value || '');
+  const status = document.getElementById('pr-history-status')?.value || '';
   const center = document.getElementById('pr-history-center')?.value || '';
   const prId = document.getElementById('pr-history-id')?.value.trim() || '';
 
-  box.innerHTML = `<div class="empty-state">${options.autoPending ? 'กำลังโหลด PR ที่รออนุมัติ...' : 'กำลังโหลด PR ย้อนหลัง...'}</div>`;
+  box.innerHTML = '<div class="empty-state">กำลังโหลด PR ย้อนหลัง...</div>';
 
   try {
     const { data, error } = await supabaseClient.rpc('get_pr_approval_status');
@@ -1770,11 +1960,215 @@ async function fetchPrOpenHistory(options = {}) {
       .filter((record) => !center || String(record.center || '') === center)
       .filter((record) => !searchText || String(record.po_id || '').toLowerCase().includes(searchText));
 
-    box.innerHTML = renderPrOpenHistoryCards(window.currentPrOpenHistoryList);
+    box.innerHTML = renderPrOpenHistoryCards(window.currentPrOpenHistoryList, {
+      emptyText: 'ไม่พบ PR ย้อนหลังตามตัวกรอง',
+      showActions: false,
+    });
 
   } catch (error) {
     console.error('fetchPrOpenHistory error:', error);
     box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลด PR ย้อนหลังไม่สำเร็จ')}</div>`;
+  }
+}
+
+function cancelPrOpenEdit() {
+  fetchPrOpenPending();
+
+  if (Array.isArray(window.currentPrOpenHistoryList)) {
+    fetchPrOpenHistory();
+  }
+}
+
+function enablePrOpenEdit(prId) {
+  const record = getPrOpenRecordById(prId);
+  const card = document.querySelector(`[data-pr-id="${CSS.escape(prId)}"]`);
+
+  if (!record || !card) {
+    showToast('❌ ไม่พบข้อมูล PR นี้', 'error');
+    return;
+  }
+
+  if (!canEditPrOpenRecord(record)) {
+    showToast('⚠️ แก้ไขได้เฉพาะ PR ที่ยังไม่อนุมัติ', 'error');
+    return;
+  }
+
+  if (card.querySelector('.po-edit-list')) {
+    showToast('กำลังอยู่ในโหมดแก้ไขแล้ว', 'error');
+    return;
+  }
+
+  const itemBox = card.querySelector('.po-items-table');
+  if (!itemBox) return;
+
+  const items = normalizeItems(record.items);
+
+  if (!items.length) {
+    showToast('⚠️ ไม่พบรายการสินค้าใน PR นี้', 'error');
+    return;
+  }
+
+  const editRows = items.map((item) => {
+    const product = item.product || '';
+    const qty = Number(item.qty) || 0;
+
+    return `
+      <div class="po-edit-row">
+        <select class="po-edit-product">
+          <option value=""></option>
+          ${PRODUCTS.map((p) => `
+            <option value="${escapeHtml(p)}" ${p === product ? 'selected' : ''}>
+              ${escapeHtml(p)}
+            </option>
+          `).join('')}
+        </select>
+
+        <input class="po-edit-qty" type="number" min="1" value="${qty}" />
+
+        <button
+          class="btn-remove-row"
+          type="button"
+          onclick="this.closest('.po-edit-row').remove()"
+        >
+          ×
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  itemBox.innerHTML = `
+    <div class="po-items-head">
+      <div>สินค้า</div>
+      <div>จำนวน</div>
+      <div></div>
+    </div>
+
+    <div class="po-edit-list">
+      ${editRows}
+    </div>
+  `;
+
+  card.querySelectorAll('.po-edit-product').forEach((select) => {
+    if (typeof enhanceProductSelect === 'function') {
+      enhanceProductSelect(select);
+    }
+  });
+
+  card.querySelector('.po-edit-footer')?.remove();
+
+  const editFooter = document.createElement('div');
+  editFooter.className = 'po-edit-footer';
+  editFooter.innerHTML = `
+    <button
+      class="btn-request-secondary"
+      type="button"
+      onclick="addPrOpenEditRow('${escapeHtml(prId)}')"
+    >
+      + เพิ่มรายการ
+    </button>
+
+    <button
+      class="btn-request-secondary"
+      type="button"
+      onclick="cancelPrOpenEdit()"
+    >
+      ยกเลิก
+    </button>
+
+    <button
+      class="btn-request-primary"
+      type="button"
+      onclick="savePrOpenEdit('${escapeHtml(prId)}')"
+    >
+      บันทึกแก้ไข
+    </button>
+  `;
+
+  const stockItems = card.querySelector('.stock-request-items');
+  if (stockItems) {
+    stockItems.insertAdjacentElement('afterend', editFooter);
+  } else {
+    card.appendChild(editFooter);
+  }
+}
+
+function addPrOpenEditRow(prId) {
+  const card = document.querySelector(`[data-pr-id="${CSS.escape(prId)}"]`);
+  const list = card?.querySelector('.po-edit-list');
+  if (!list) return;
+
+  const row = document.createElement('div');
+  row.className = 'po-edit-row';
+  row.innerHTML = `
+    <select class="po-edit-product">
+      <option value=""></option>
+      ${getProductOptions()}
+    </select>
+
+    <input class="po-edit-qty" type="number" min="1" placeholder="จำนวน" />
+
+    <button class="btn-remove-row" type="button" onclick="this.closest('.po-edit-row').remove()">×</button>
+  `;
+
+  list.appendChild(row);
+
+  const select = row.querySelector('.po-edit-product');
+  if (select && typeof enhanceProductSelect === 'function') {
+    enhanceProductSelect(select);
+  }
+}
+
+async function savePrOpenEdit(prId) {
+  const card = document.querySelector(`[data-pr-id="${CSS.escape(prId)}"]`);
+  if (!card) return;
+
+  const record = getPrOpenRecordById(prId);
+  if (!canEditPrOpenRecord(record)) {
+    showToast('⚠️ แก้ไขได้เฉพาะ PR ที่ยังไม่อนุมัติ', 'error');
+    return;
+  }
+
+  const center = record?.center || currentUser?.center || '';
+  const rows = card.querySelectorAll('.po-edit-row');
+  const items = Array.from(rows).map((row) => {
+    const product = row.querySelector('.po-edit-product')?.value || '';
+    const qty = Number(row.querySelector('.po-edit-qty')?.value) || 0;
+    const unit = product && typeof getStockUnit === 'function' ? getStockUnit(center, product) : '';
+
+    return { product, qty, unit, center, stock_center: center };
+  }).filter((item) => item.product && item.qty > 0);
+
+  if (items.length === 0) {
+    showToast('⚠️ กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ', 'error');
+    return;
+  }
+
+  showToast('', 'loading', 'กำลังบันทึกการแก้ไข PR...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('update_pr_request_items', {
+      p_pr_id: prId,
+      p_staff_code: currentUser?.code || '',
+      p_staff_name: currentUser?.name || currentUser?.code || '',
+      p_items: items,
+    });
+
+    if (error) throw error;
+
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'แก้ไข PR ไม่สำเร็จ');
+    }
+
+    showToast('✅ แก้ไข PR สำเร็จ', 'success');
+    await fetchPrOpenPending();
+
+    if (Array.isArray(window.currentPrOpenHistoryList)) {
+      await fetchPrOpenHistory();
+    }
+
+  } catch (error) {
+    console.error('savePrOpenEdit error:', error);
+    showToast(`❌ ${error.message || 'แก้ไข PR ไม่สำเร็จ'}`, 'error');
   }
 }
 
@@ -1868,6 +2262,42 @@ function renderAdminTransferForm() {
       <span>🔁</span>
       <span>บันทึก Transfer Stock</span>
     </button>
+
+    <div class="section-divider"></div>
+
+    <section class="transfer-history-panel">
+      <div class="panel-title compact-title">
+        <span class="title-icon">📋</span>
+        <div>
+          <h2>รายการ Transaction ย้อนหลัง</h2>
+          <p>ค้นหาประวัติการโอนย้ายและการตัดสต็อกสินค้า</p>
+        </div>
+      </div>
+
+      <div class="transfer-history-filters">
+        <div class="field-group">
+          <label for="transfer-history-product">รายการสินค้า</label>
+          <select id="transfer-history-product" class="product-select">
+            <option value="">— เลือกรายการสินค้า —</option>
+            ${getProductOptions()}
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label for="transfer-history-date">วันที่</label>
+          <input type="date" id="transfer-history-date" />
+        </div>
+
+        <button class="btn-request-secondary transfer-history-refresh" id="btn-transfer-history-search" type="button">
+          <span>ค้นหา</span>
+          <strong>เรียกดูรายการ</strong>
+        </button>
+      </div>
+
+      <div id="transfer-history-list" class="transfer-history-list">
+        <div class="empty-state">เลือกรายการสินค้าเพื่อเรียกดูประวัติ วันที่เป็นตัวกรองเสริม</div>
+      </div>
+    </section>
   `;
 
   setToday('transfer-date');
@@ -1884,8 +2314,12 @@ function renderAdminTransferForm() {
     filterTransferTargetCenters();
     updateTransferConversionMode();
   });
+  document.getElementById('btn-transfer-history-search')?.addEventListener('click', fetchTransferTransactionHistory);
+  document.getElementById('transfer-history-date')?.addEventListener('change', fetchTransferTransactionHistory);
+  document.getElementById('transfer-history-product')?.addEventListener('change', fetchTransferTransactionHistory);
   enhanceStockProductFilter(document.getElementById('transfer-convert-from'));
   enhanceStockProductFilter(document.getElementById('transfer-convert-to'));
+  enhanceStockProductFilter(document.getElementById('transfer-history-product'));
   ['transfer-convert-from', 'transfer-convert-to'].forEach((id) => {
     const select = document.getElementById(id);
     if (!select?.tomselect) return;
@@ -1897,6 +2331,243 @@ function renderAdminTransferForm() {
   addProductRow('transfer');
   updateTransferConversionMode();
   filterTransferTargetCenters();
+}
+
+function getTransferHistoryDateText(value) {
+  if (!value) return '-';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Asia/Bangkok',
+  });
+}
+
+function cleanTransferHistoryProductName(value) {
+  return String(value || '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanTransferHistoryAction(value) {
+  return String(value || '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function escapeSupabaseLike(value) {
+  return String(value || '').replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function getTransferHistorySource(tx = {}) {
+  if (tx.source_center) return tx.source_center;
+  if (tx.action === 'TRANSFER_ACCEPT') return tx.target_center || '';
+  return tx.center || '';
+}
+
+function getTransferHistoryDestination(tx = {}) {
+  if (tx.destination_center) return tx.destination_center;
+  if (tx.action === 'TRANSFER_ACCEPT') return tx.center || '';
+  return tx.target_center || '';
+}
+
+function getTransferHistoryUnit(tx = {}) {
+  const center = tx.stock_balance_center || getTransferHistorySource(tx) || tx.center || '';
+  const product = tx.stock_balance_product || tx.product || '';
+
+  if (typeof getStockUnit === 'function' && center && product) {
+    return getStockUnit(center, product) || '';
+  }
+
+  return tx.unit || '';
+}
+
+function getTransferHistoryActionLabel(action = '') {
+  const normalized = cleanTransferHistoryAction(action);
+  if (normalized === 'STOCK_OUT') return 'เบิก/ตัดสต็อก';
+  if (normalized === 'TRANSFER_OUT') return 'โอนย้าย';
+  if (normalized === 'TRANSFER_ACCEPT') return 'รับโอน';
+  return action || '-';
+}
+
+function getTransferHistoryActionClass(action = '') {
+  const normalized = cleanTransferHistoryAction(action);
+  if (normalized === 'STOCK_OUT') return 'is-stock-out';
+  if (normalized === 'TRANSFER_OUT') return 'is-transfer';
+  return '';
+}
+
+function renderTransferTransactionHistory(records = []) {
+  if (!records.length) {
+    return '<div class="empty-state">ไม่พบรายการ Transaction ตามตัวกรอง</div>';
+  }
+
+  const rows = records.map((tx) => {
+    const sourceCenter = getTransferHistorySource(tx);
+    const destinationCenter = getTransferHistoryDestination(tx);
+    const balance = tx.stock_balance_after;
+    const actionLabel = getTransferHistoryActionLabel(tx.action);
+
+    return `
+      <div class="transfer-history-row">
+        <span>${escapeHtml(getTransferHistoryDateText(tx.created_at))}</span>
+        <span>
+          <span class="transfer-history-type ${escapeHtml(getTransferHistoryActionClass(tx.action))}">
+            ${escapeHtml(actionLabel)}
+          </span>
+        </span>
+        <strong title="${escapeHtml(actionLabel)}">${escapeHtml(tx.product || '-')}</strong>
+        <span>${escapeHtml(sourceCenter || '-')}</span>
+        <span>${escapeHtml(destinationCenter || '-')}</span>
+        <span class="num">${Number(tx.qty || 0).toLocaleString()}</span>
+        <span>${escapeHtml(getTransferHistoryUnit(tx) || '-')}</span>
+        <span class="num">${balance === null || balance === undefined ? '-' : Number(balance || 0).toLocaleString()}</span>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="transfer-history-table" role="table" aria-label="รายการ Transaction ย้อนหลัง">
+      <div class="transfer-history-head" role="row">
+        <span>วันที่</span>
+        <span>ประเภท</span>
+        <span>รายการ</span>
+        <span>ต้นทาง</span>
+        <span>ปลายทาง</span>
+        <span>จำนวน</span>
+        <span>หน่วย</span>
+        <span>คงเหลือต้นทาง</span>
+      </div>
+      ${rows}
+    </div>
+  `;
+}
+
+async function fetchTransferTransactionHistory() {
+  const box = document.getElementById('transfer-history-list');
+  if (!box || typeof supabaseClient === 'undefined') return;
+
+  const selectedProduct = String(document.getElementById('transfer-history-product')?.value || '').trim();
+  const cleanSelectedProduct = cleanTransferHistoryProductName(selectedProduct);
+  const dateText = document.getElementById('transfer-history-date')?.value || '';
+
+  if (!cleanSelectedProduct) {
+    box.innerHTML = '<div class="empty-state">เลือกรายการสินค้าเพื่อเรียกดูประวัติ วันที่เป็นตัวกรองเสริม</div>';
+    return;
+  }
+
+  box.innerHTML = '<div class="empty-state">กำลังโหลดรายการ Transaction ย้อนหลัง...</div>';
+
+  try {
+    const allowedActions = new Set(['STOCK_OUT', 'TRANSFER_OUT']);
+    const buildQuery = (columns) => {
+      let nextQuery = supabaseClient
+        .from('transactions')
+        .select(columns)
+        .ilike('product', `%${escapeSupabaseLike(cleanSelectedProduct)}%`)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (dateText) {
+        const start = new Date(`${dateText}T00:00:00+07:00`).toISOString();
+        const end = new Date(`${dateText}T23:59:59.999+07:00`).toISOString();
+        nextQuery = nextQuery.gte('created_at', start).lte('created_at', end);
+      }
+
+      return nextQuery;
+    };
+
+    let { data, error } = await buildQuery('request_id, action, center, target_center, source_center, destination_center, product, qty, result, note, stock_balance_center, stock_balance_product, stock_balance_after, created_at');
+
+    if (error && /column|source_center|destination_center|stock_balance/i.test(`${error.message || ''} ${error.details || ''}`)) {
+      const fallback = await buildQuery('request_id, action, center, target_center, product, qty, result, note, created_at');
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) throw error;
+
+    const records = (data || [])
+      .filter((tx) => {
+        if (!allowedActions.has(cleanTransferHistoryAction(tx.action))) return false;
+        const cleanProduct = cleanTransferHistoryProductName(tx.product);
+        const cleanBalanceProduct = cleanTransferHistoryProductName(tx.stock_balance_product);
+        return (cleanProduct && (
+          cleanProduct === cleanSelectedProduct
+          || cleanProduct.includes(cleanSelectedProduct)
+          || cleanSelectedProduct.includes(cleanProduct)
+        )) || (cleanBalanceProduct && (
+          cleanBalanceProduct === cleanSelectedProduct
+          || cleanBalanceProduct.includes(cleanSelectedProduct)
+          || cleanSelectedProduct.includes(cleanBalanceProduct)
+        ));
+      });
+
+    if (!records.length) {
+      let fallbackQuery = supabaseClient
+        .from('transactions')
+        .select('request_id, action, center, target_center, source_center, destination_center, product, qty, result, note, stock_balance_center, stock_balance_product, stock_balance_after, created_at')
+        .order('created_at', { ascending: false })
+        .limit(3000);
+
+      if (dateText) {
+        const start = new Date(`${dateText}T00:00:00+07:00`).toISOString();
+        const end = new Date(`${dateText}T23:59:59.999+07:00`).toISOString();
+        fallbackQuery = fallbackQuery.gte('created_at', start).lte('created_at', end);
+      }
+
+      let fallbackResult = await fallbackQuery;
+
+      if (fallbackResult.error && /column|source_center|destination_center|stock_balance/i.test(`${fallbackResult.error.message || ''} ${fallbackResult.error.details || ''}`)) {
+        let legacyFallbackQuery = supabaseClient
+          .from('transactions')
+          .select('request_id, action, center, target_center, product, qty, result, note, created_at')
+          .order('created_at', { ascending: false })
+          .limit(3000);
+
+        if (dateText) {
+          const start = new Date(`${dateText}T00:00:00+07:00`).toISOString();
+          const end = new Date(`${dateText}T23:59:59.999+07:00`).toISOString();
+          legacyFallbackQuery = legacyFallbackQuery.gte('created_at', start).lte('created_at', end);
+        }
+
+        fallbackResult = await legacyFallbackQuery;
+      }
+
+      if (fallbackResult.error) throw fallbackResult.error;
+
+      const fallbackRecords = (fallbackResult.data || [])
+        .filter((tx) => {
+          if (!allowedActions.has(cleanTransferHistoryAction(tx.action))) return false;
+          const cleanProduct = cleanTransferHistoryProductName(tx.product);
+          const cleanBalanceProduct = cleanTransferHistoryProductName(tx.stock_balance_product);
+          return (cleanProduct && (
+            cleanProduct === cleanSelectedProduct
+            || cleanProduct.includes(cleanSelectedProduct)
+            || cleanSelectedProduct.includes(cleanProduct)
+          )) || (cleanBalanceProduct && (
+            cleanBalanceProduct === cleanSelectedProduct
+            || cleanBalanceProduct.includes(cleanSelectedProduct)
+            || cleanSelectedProduct.includes(cleanBalanceProduct)
+          ));
+        });
+
+      box.innerHTML = renderTransferTransactionHistory(fallbackRecords);
+      return;
+    }
+
+    box.innerHTML = renderTransferTransactionHistory(records);
+
+  } catch (error) {
+    console.error('fetchTransferTransactionHistory error:', error);
+    box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลดรายการ Transaction ไม่สำเร็จ')}</div>`;
+  }
 }
 
 function getPoCenter(po = {}) {
@@ -2148,11 +2819,7 @@ async function submitPoCmo() {
     const poSearch = document.getElementById('po-status-search');
     if (poSearch) poSearch.value = '';
 
-    await fetchPoStatus();
-
-    if (typeof fetchPendingPoSummary === 'function') {
-      await fetchPendingPoSummary();
-    }
+    await fetchPrOpenPending();
 
     const poNote = document.getElementById('po-note');
     if (poNote) poNote.value = '';
@@ -2194,17 +2861,14 @@ async function fetchPoStatus() {
   box.innerHTML = '<div class="empty-state">กำลังโหลดสถานะ PO...</div>';
 
   try {
-    const [{ data, error }, prResult] = await Promise.all([
-      supabaseClient.rpc('get_po_status'),
-      fetchPrStatusForPoPage(),
-    ]);
+    const { data, error } = await supabaseClient.rpc('get_po_status');
 
     if (error) {
       throw error;
     }
 
     const recordsById = new Map();
-    [...(data || []), ...(prResult || [])]
+    (data || [])
       .filter((po) => isPoDocumentRecord(po))
       .forEach((po) => {
         const poId = po.po_id || po.po_no || po.po_number || po.request_id || po.id || '';
@@ -2285,25 +2949,9 @@ async function fetchPoStatus() {
   }
 }
 
-async function fetchPrStatusForPoPage() {
-  try {
-    const { data, error } = await supabaseClient.rpc('get_pr_approval_status');
-
-    if (error) {
-      console.warn('get_pr_approval_status skipped for PO status:', error);
-      return [];
-    }
-
-    return data || [];
-  } catch (error) {
-    console.warn('get_pr_approval_status unavailable for PO status:', error);
-    return [];
-  }
-}
-
 function isPoDocumentRecord(po = {}) {
   const documentId = String(po.po_id || po.po_no || po.po_number || '').toUpperCase();
-  return documentId.startsWith('PO-') || documentId.startsWith('PR-');
+  return documentId.startsWith('PO-');
 }
 
 function isReceiveablePoRecord(po = {}) {
@@ -2579,17 +3227,6 @@ function renderPoStatus(poList) {
           </div>
         ` : ''}
 
-        <div class="po-email-actions">
-          <button
-            class="btn-po-email"
-            type="button"
-            data-email-po-id="${escapeHtml(po.po_id || '')}"
-            onclick="sendPoEmail('${escapeHtml(po.po_id || '')}', this)"
-          >
-            <span>📧</span>
-            <span>ส่งอีเมล PR</span>
-          </button>
-        </div>
       </article>
     `;
   }).join('');
@@ -2814,6 +3451,20 @@ document.addEventListener('click', (event) => {
   if (saveEditsButton) {
     event.preventDefault();
     savePartialPoQuantityEdits(saveEditsButton.dataset.savePartialPoEdits || '', saveEditsButton);
+    return;
+  }
+
+  const editPrButton = event.target.closest('[data-edit-pr-id]');
+  if (editPrButton) {
+    event.preventDefault();
+    enablePrOpenEdit(editPrButton.dataset.editPrId || '');
+    return;
+  }
+
+  const sendPrButton = event.target.closest('[data-send-pr-approval-id]');
+  if (sendPrButton) {
+    event.preventDefault();
+    sendPrApprovalRequest(sendPrButton.dataset.sendPrApprovalId || '', sendPrButton);
     return;
   }
 
@@ -3808,14 +4459,21 @@ function getPoReceiveLineMeta(po = {}, receivedItem = {}) {
   }
 
   const unit = getPoItemUnit(poLine, getPoCenter(po));
-  const unitQty = Number(
+  const receivedQty = Number(receivedItem.qty || 0) || 0;
+  const orderedQty = Number(
+    poLine.qty
+    ?? poLine.requested_qty
+    ?? poLine.requestedQty
+    ?? 0
+  ) || 0;
+  const lineUnitQty = Number(
     poLine.unit_qty
     ?? poLine.unitQty
     ?? poLine.unit_count
     ?? poLine.unitCount
     ?? 0
   ) || null;
-  const totalPrice = Number(
+  const lineTotalPrice = Number(
     poLine.total_price
     ?? poLine.totalPrice
     ?? poLine.line_total
@@ -3826,13 +4484,27 @@ function getPoReceiveLineMeta(po = {}, receivedItem = {}) {
     poLine.unit_price
     ?? poLine.unitPrice
     ?? 0
-  ) || (totalPrice && unitQty ? totalPrice / unitQty : null);
+  ) || (lineTotalPrice && lineUnitQty ? lineTotalPrice / lineUnitQty : null);
+  const unitPerBox = Number(
+    poLine.unit_per_box
+    ?? poLine.unitPerBox
+    ?? poLine.units_per_box
+    ?? poLine.unitsPerBox
+    ?? 0
+  ) || (lineUnitQty && orderedQty ? lineUnitQty / orderedQty : null);
+  const receiveRatio = orderedQty > 0 && receivedQty > 0 ? receivedQty / orderedQty : null;
+  const receivedUnitQty = receivedQty > 0 && unitPerBox
+    ? receivedQty * unitPerBox
+    : (lineUnitQty && receiveRatio ? lineUnitQty * receiveRatio : lineUnitQty);
+  const receivedTotalPrice = receivedUnitQty && unitPrice
+    ? receivedUnitQty * unitPrice
+    : (lineTotalPrice && receiveRatio ? lineTotalPrice * receiveRatio : lineTotalPrice);
 
   return {
     unit,
-    unit_qty: unitQty,
+    unit_qty: receivedUnitQty,
     unit_price: unitPrice,
-    total_price: totalPrice,
+    total_price: receivedTotalPrice,
     vendor_name: poLine.vendor_name || poLine.vendorName || poLine.company || '',
     company: poLine.company || poLine.vendor_name || poLine.vendorName || '',
   };

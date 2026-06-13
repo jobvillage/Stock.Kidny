@@ -1826,7 +1826,7 @@ button {
 
 .pr-price-head,
 .pr-price-row {
-  grid-template-columns: minmax(350px, 1fr) 128px 88px 88px 108px 28px;
+  grid-template-columns: 36px minmax(200px, 1fr) 120px 70px 90px 105px 28px;
 }
 
 .pr-price-head {
@@ -1846,11 +1846,54 @@ button {
 }
 
 .pr-price-head span:first-child {
-  text-align: left;
+  text-align: center;
 }
 
 .pr-open-po-row {
   gap: 10px;
+  align-items: center; /* เพิ่มตรงนี้ */
+}
+
+.pr-row-order-controls {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+}
+
+.pr-row-order-controls button {
+  display: grid;
+  width: 34px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #9fb6d6;
+  border-radius: 12px;
+  color: #174f8f;
+  background: linear-gradient(180deg, #ffffff 0%, #eaf2ff 100%);
+  box-shadow: 0 5px 12px rgba(39, 103, 177, 0.16);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pr-row-order-controls button:disabled {
+  color: #9aa6b5;
+  border-color: #dbe3ee;
+  background: #f3f6fa;
+  box-shadow: none;
+  opacity: 0.75;
+  cursor: default;
+}
+
+.pr-request-actions .btn-po-edit {
+  color: #175cd3;
+  background: #e8f1ff;
+  border: 1px solid #c7dafc;
+  cursor: pointer;
+}
+
+.pr-request-actions .btn-po-edit:hover {
+  background: #dbeafe;
 }
 
 .pr-po-items-card {
@@ -1928,7 +1971,7 @@ button {
   font-weight: 900;
 }
 
-.pr-open-po-row input[data-pr-po-unit-qty],
+.pr-open-po-row input[data-pr-po-unit-per-box],
 .pr-open-po-row input[data-pr-po-line-total] {
   text-align: center;
 }
@@ -1937,6 +1980,186 @@ button {
   width: 28px;
   height: 28px;
   font-size: 15px;
+}
+
+.pr-opened-po-edit-head,
+.pr-opened-po-edit-row {
+  display: grid;
+  grid-template-columns: 38px minmax(250px, 1.6fr) minmax(106px, 132px) minmax(74px, 96px) minmax(68px, 86px) minmax(84px, 102px) 34px;
+  gap: 8px;
+  align-items: center;
+}
+
+.pr-opened-po-edit-head > *,
+.pr-opened-po-edit-row > * {
+  min-width: 0;
+}
+
+.pr-opened-po-edit-head {
+  padding: 12px 16px;
+  margin-top: 14px;
+  border-radius: 16px 16px 0 0;
+  background: #f0f3f7;
+  color: #667085;
+  font-weight: 900;
+}
+
+.pr-opened-po-edit-head span {
+  text-align: center;
+}
+
+.pr-opened-po-edit-head span:nth-child(2) {
+  text-align: left;
+}
+
+.pr-opened-po-edit-row {
+  padding: 14px 16px;
+  border-top: 1px solid #e3e8ef;
+}
+
+.pr-opened-po-edit-row .pr-opened-po-order-controls {
+  justify-self: center;
+}
+
+.pr-opened-po-product {
+  color: #172033;
+}
+
+.pr-opened-po-edit-row input {
+  width: 100%;
+  min-height: 50px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: rgba(255,255,255,0.9);
+  outline: none;
+  padding: 8px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.pr-opened-po-edit-row input::-webkit-outer-spin-button,
+.pr-opened-po-edit-row input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.pr-opened-po-edit-row input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.pr-opened-po-edit-row select,
+.pr-opened-po-edit-row .ts-wrapper {
+  width: 100%;
+  min-width: 0;
+}
+
+.pr-opened-po-edit-row select {
+  min-height: 50px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: rgba(255,255,255,0.9);
+  outline: none;
+  padding: 10px;
+  font-weight: 800;
+}
+
+.pr-opened-po-edit-row .qty-input-with-unit {
+  min-height: 50px;
+  grid-template-rows: 1fr;
+  grid-template-columns: minmax(34px, 1fr) auto;
+  justify-content: stretch;
+  border-radius: 16px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.pr-opened-po-edit-row .qty-input-with-unit > input {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.pr-opened-po-edit-row .qty-input-with-unit > span {
+  align-self: center;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pr-opened-po-edit-row .btn-remove-row {
+  justify-self: center;
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+}
+
+.pr-opened-po-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px;
+  border-top: 1px solid #e3e8ef;
+}
+
+.pr-opened-po-edit-actions .pr-opened-po-add-row {
+  margin-right: auto;
+  color: #175cd3;
+  background: #e8f1ff;
+}
+
+.pr-opened-po-edit-actions button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 22px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.pr-opened-po-edit-actions .btn-primary {
+  color: #ffffff;
+  background: #2563eb;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.18);
+}
+
+.pr-opened-po-edit-actions .btn-secondary {
+  color: #475467;
+  background: #eef2f7;
+}
+
+.pr-opened-po-edit-actions button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.pr-po-mobile-field {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) and (min-width: 861px) {
+  .pr-price-head,
+  .pr-price-row {
+    grid-template-columns: 36px minmax(180px, 1fr) 104px 78px 94px 104px 28px;
+    gap: 8px;
+  }
+
+  .pr-price-head {
+    padding-inline: 14px;
+  }
+
+  .pr-price-row {
+    padding-inline: 12px;
+  }
+
+  .pr-opened-po-edit-head,
+  .pr-opened-po-edit-row {
+    grid-template-columns: 36px minmax(210px, 1.55fr) minmax(96px, 120px) minmax(70px, 90px) minmax(66px, 82px) minmax(78px, 96px) 32px;
+    gap: 8px;
+  }
 }
 
 .pr-check-grid,
@@ -2095,14 +2318,174 @@ button {
   }
 
   .pr-request-meta,
-  .pr-item-row,
-  .pr-price-head,
-  .pr-price-row {
+  .pr-item-row {
     grid-template-columns: 1fr;
   }
 
-  .pr-price-head span:last-child {
+  .pr-price-head {
     display: none;
+  }
+
+  .pr-placeholder-list[data-pr-po-items] {
+    display: grid;
+    gap: 12px;
+    padding-top: 12px;
+  }
+
+  .pr-opened-po-edit-head {
+    display: none;
+  }
+
+  .pr-opened-po-edit-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 12px;
+    padding: 12px;
+    border: 1px solid #e3e8ef;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 8px 18px rgba(44, 61, 98, 0.06);
+  }
+
+  .pr-opened-po-edit-row .pr-po-mobile-field {
+    display: grid;
+    gap: 7px;
+    padding: 10px 12px 12px;
+    border: 1px solid #e3e8ef;
+    border-radius: 16px;
+    background: #f8fafc;
+  }
+
+  .pr-opened-po-edit-row .qty-input-with-unit.pr-po-mobile-field {
+    grid-template-columns: 1fr auto;
+    justify-content: stretch;
+    min-height: auto;
+    padding: 10px 12px 12px;
+    background: #f8fafc;
+  }
+
+  .pr-opened-po-edit-row .qty-input-with-unit.pr-po-mobile-field > input,
+  .pr-opened-po-edit-row .qty-input-with-unit.pr-po-mobile-field > span {
+    grid-row: 2;
+  }
+
+  .pr-opened-po-edit-row .qty-input-with-unit.pr-po-mobile-field > input {
+    grid-column: 1;
+  }
+
+  .pr-opened-po-edit-row .qty-input-with-unit.pr-po-mobile-field > span {
+    grid-column: 2;
+    align-self: center;
+  }
+
+  .pr-opened-po-edit-row .pr-unit-price.pr-po-mobile-field {
+    min-height: auto;
+    color: #172033;
+    text-align: center;
+  }
+
+  .pr-opened-po-edit-row .btn-remove-row {
+    justify-self: end;
+  }
+
+  .pr-opened-po-edit-row .pr-opened-po-order-controls {
+    justify-self: start;
+  }
+
+  .pr-open-po-row {
+    grid-template-columns: 42px minmax(0, 1fr) 38px;
+    gap: 10px;
+    align-items: start;
+    padding: 12px;
+    border: 1px solid #e3e8ef;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 8px 18px rgba(44, 61, 98, 0.06);
+  }
+
+  .pr-open-po-row .pr-row-order-controls {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .pr-open-po-row > select,
+  .pr-open-po-row > .ts-wrapper {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .pr-open-po-row .btn-remove-row {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    margin-top: 4px;
+  }
+
+  .pr-open-po-row .qty-input-with-unit,
+  .pr-open-po-row label[data-label="ต่อกล่อง"],
+  .pr-open-po-row .pr-unit-price,
+  .pr-open-po-row label[data-label="ราคารวม"] {
+    grid-column: 1 / -1;
+  }
+
+  .pr-po-mobile-field {
+    position: relative;
+    display: grid;
+    gap: 7px;
+    padding: 10px 12px 12px;
+    border: 1px solid #e3e8ef;
+    border-radius: 16px;
+    background: #f8fafc;
+  }
+
+  .pr-po-mobile-field::before {
+    content: attr(data-label);
+    color: #667085;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .pr-open-po-row .qty-input-with-unit.pr-po-mobile-field {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    padding: 10px 12px 12px;
+    background: #f8fafc;
+  }
+
+  .pr-open-po-row .qty-input-with-unit.pr-po-mobile-field > input,
+  .pr-open-po-row .qty-input-with-unit.pr-po-mobile-field > span {
+    grid-row: 2;
+  }
+
+  .pr-open-po-row .qty-input-with-unit.pr-po-mobile-field > input {
+    grid-column: 1;
+  }
+
+  .pr-open-po-row .qty-input-with-unit.pr-po-mobile-field > span {
+    grid-column: 2;
+    align-self: center;
+  }
+
+  .pr-open-po-row .pr-unit-price.pr-po-mobile-field {
+    display: grid;
+    place-items: stretch;
+    min-height: auto;
+    color: #172033;
+    text-align: center;
+  }
+
+  .pr-open-po-row .pr-po-mobile-field input {
+    text-align: center;
+  }
+
+  .pr-open-po-row select,
+  .pr-open-po-row input,
+  .pr-open-po-row .qty-input-with-unit,
+  .pr-unit-price {
+    min-height: 48px;
   }
 
   .pr-approval-board {
@@ -2217,6 +2600,18 @@ button {
 
   .pr-approval-board-actions {
     gap: 12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .pr-open-po-row {
+    grid-template-columns: 40px minmax(0, 1fr) 36px;
+    padding: 10px;
+  }
+
+  .pr-row-order-controls button {
+    width: 32px;
+    height: 28px;
   }
 }
 
@@ -2370,6 +2765,147 @@ button {
   justify-self: start;
   color: #7b8494;
   white-space: nowrap;
+}
+
+.transfer-history-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 10px 28px rgba(44, 61, 98, 0.08);
+}
+
+.transfer-history-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.7fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.transfer-history-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 18px;
+  color: #2767b1;
+  background: #eaf2ff;
+  box-shadow: 0 10px 22px rgba(74, 144, 226, 0.12);
+}
+
+.transfer-history-refresh span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.transfer-history-refresh strong {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.transfer-history-list {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.transfer-history-table {
+  min-width: 860px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.transfer-history-head,
+.transfer-history-row {
+  display: grid;
+  grid-template-columns: 112px 124px minmax(150px, 1.4fr) minmax(100px, 0.9fr) minmax(100px, 0.9fr) 78px 88px 128px;
+  align-items: center;
+}
+
+.transfer-history-head {
+  min-height: 38px;
+  color: #172033;
+  background: rgba(23, 32, 51, 0.13);
+  font-weight: 900;
+}
+
+.transfer-history-head span:first-child {
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
+.transfer-history-head span:last-child {
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.transfer-history-head span,
+.transfer-history-row span,
+.transfer-history-row strong {
+  min-width: 0;
+  padding: 9px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transfer-history-row {
+  min-height: 42px;
+  border-bottom: 1px solid rgba(23, 32, 51, 0.14);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.transfer-history-row strong {
+  font-weight: 900;
+}
+
+.transfer-history-type {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.transfer-history-type.is-transfer {
+  color: #2767b1;
+  background: #eaf2ff;
+}
+
+.transfer-history-type.is-stock-out {
+  color: #be123c;
+  background: #fff1f2;
+}
+
+.transfer-history-row .num {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .transfer-history-panel {
+    padding: 14px;
+  }
+
+  .transfer-history-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-history-refresh {
+    width: 100%;
+  }
 }
 
 /* =====================
