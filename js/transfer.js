@@ -1838,7 +1838,16 @@ function renderPrOpenHistoryCards(records = [], options = {}) {
             <span class="overview-label">เลข PR</span>
             <strong>${escapeHtml(record.po_id || '-')}</strong>
           </div>
-          <span class="overview-pill ${isApproved ? 'is-completed' : ''}">${escapeHtml(statusText)}</span>
+          <div class="po-status-top">
+            <span class="overview-pill ${isApproved ? 'is-completed' : ''}">${escapeHtml(statusText)}</span>
+            <button
+              class="btn-po-print"
+              type="button"
+              onclick="printPoDocument('${escapeHtml(record.po_id || '')}')"
+            >
+              🖨️ พิมพ์ PR
+            </button>
+          </div>
         </div>
 
         <div class="stock-request-meta">
@@ -3476,10 +3485,12 @@ document.addEventListener('click', (event) => {
 });
 
 function printPoDocument(poId) {
-  const po = window.currentPoStatusList?.find((item) => item.po_id === poId);
+  const po = (window.currentPoStatusList || []).find((item) => item.po_id === poId)
+    || getPrOpenRecordById(poId);
+  const isPrDocument = String(poId || '').toUpperCase().startsWith('PR-');
 
   if (!po) {
-    showToast('❌ ไม่พบข้อมูล PO นี้', 'error');
+    showToast(`❌ ไม่พบข้อมูล ${isPrDocument ? 'PR' : 'PO'} นี้`, 'error');
     return;
   }
 
@@ -3487,11 +3498,13 @@ function printPoDocument(poId) {
   const poCenter = getPoCenter(po);
   const receivedStates = getPoLineReceivedStates(po);
 
-  const statusText = po.status === 'received'
-    ? 'รับเข้าแล้ว'
-    : po.status === 'partial_received'
-      ? 'รับเข้าบางส่วน'
-      : 'รอรับสินค้า';
+  const statusText = isPrDocument
+    ? getPrOpenHistoryStatusText(po.status)
+    : po.status === 'received'
+      ? 'รับเข้าแล้ว'
+      : po.status === 'partial_received'
+        ? 'รับเข้าบางส่วน'
+        : 'รอรับสินค้า';
 
   const itemRows = items.map((item, index) => {
     const receivedState = receivedStates[index] || {};
