@@ -3204,32 +3204,4 @@ async function saveAddDataVendorProduct(button) {
   }
 }
 
-function renderExportDataPanel() {
-  const panel = ensurePrPanel('pr_export_data', 'panel-pr-export-data');
-  panel.innerHTML = `
-    <div class="panel-title">
-      <span class="title-icon">📤</span>
-      <div>
-        <h2>Export Data</h2>
-        <p>เลือกข้อมูลจาก Supabase เพื่อเตรียม Export เป็น CSV</p>
-      </div>
-    </div>
 
-    <section class="pr-main-card">
-      <div class="pr-card-head">
-        <div>
-          <h3>เลือก Table ที่ต้องการ Export</h3>
-          <p>ยังเป็นโครงหน้า ยังไม่เชื่อมการดาวน์โหลดจริง</p>
-        </div>
-        <button class="btn-submit btn-submit-transfer" type="button">Export CSV</button>
-      </div>
-      <div class="pr-export-grid">
-        <label><input type="checkbox" /> เลือกทั้งหมด</label>
-        <label><input type="checkbox" checked /> po_cmo_requests</label>
-        <label><input type="checkbox" checked /> stock_items</label>
-        <label><input type="checkbox" checked /> stock_requests</label>
-        <label><input type="checkbox" checked /> transactions</label>
-      </div>
-    </section>
-  `;
-}
