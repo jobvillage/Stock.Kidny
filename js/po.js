@@ -5,6 +5,16 @@ const PR_APPROVER_BY_CODE = {
   user2: 'toy',
 };
 
+const PR_CENTER_DISPLAY_NAME = {
+  'ไตล่าง': 'บริษัท ลำพูนเพื่อนไต จำกัด',
+  'ไตบน': 'บริษัท คิดนี่แคร์ลำพูน จำกัด',
+  'ไตดี': 'บริษัท ไตดีลำพูน จำกัด',
+};
+
+function getPrCenterDisplayName(center) {
+  return PR_CENTER_DISPLAY_NAME[center] || center;
+}
+
 const PR_COMPANIES = [
   {
     name: 'Aeonmed',
@@ -455,7 +465,7 @@ function renderPrApprovalPoCard(record, variant) {
       <div class="pr-request-meta">
         <div><span>วันที่เปิด PR</span><strong>${escapeHtml(record.po_date || '-')}</strong></div>
         <div><span>ผู้เปิด PR</span><strong>${escapeHtml(record.po_person || '-')}</strong></div>
-        <div><span>ศูนย์รับเข้า</span><strong>${escapeHtml(record.center || '-')}</strong></div>
+        <div><span>ศูนย์รับเข้า</span><strong>${escapeHtml(getPrCenterDisplayName(record.center || '-'))}</strong></div>
       </div>
 
       <div class="pr-company-button-list">
@@ -689,6 +699,7 @@ function renderPrApprovalPreview(company, record, variant) {
       <div class="pr-document-meta">
         <div><span>วันที่เปิด PR</span><strong>${escapeHtml(record.po_date || '-')}</strong></div>
         <div><span>ผู้เปิด PR</span><strong>${escapeHtml(record.po_person || '-')}</strong></div>
+        <div><span>ศูนย์รับเข้า</span><strong>${escapeHtml(getPrCenterDisplayName(record.center || '-'))}</strong></div>
         <div><span>สถานะ</span><strong>${variant === 'approved' ? 'อนุมัติแล้ว' : 'รออนุมัติ'}</strong></div>
       </div>
 
@@ -794,7 +805,7 @@ function renderApprovedPrStatusCard(record, variant = 'approved') {
       <div class="pr-request-meta">
         <div><span>วันที่เปิด PR</span><strong>${escapeHtml(record.po_date || '-')}</strong></div>
         <div><span>ผู้เปิด PR</span><strong>${escapeHtml(record.po_person || '-')}</strong></div>
-        <div><span>ศูนย์รับเข้า</span><strong>${escapeHtml(record.center || '-')}</strong></div>
+        <div><span>ศูนย์รับเข้า</span><strong>${escapeHtml(getPrCenterDisplayName(record.center || '-'))}</strong></div>
         ${variant === 'pending' ? `
           <div><span>พี่แดง</span><strong>${record.pr_daeng_approved_at ? 'อนุมัติแล้ว' : 'รออนุมัติ'}</strong></div>
           <div><span>พี่ต้อย</span><strong>${record.pr_toy_approved_at ? 'อนุมัติแล้ว' : 'รออนุมัติ'}</strong></div>
