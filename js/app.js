@@ -359,7 +359,7 @@ function initWithdrawSummaryProductFilter() {
     <option value="">ทุกสินค้า</option>
     ${options}
   `;
-  if (oldValue) select.value = oldValue;
+  select.value = '';
 
   if (typeof enhanceStockProductFilter === 'function') {
     enhanceStockProductFilter(select);
