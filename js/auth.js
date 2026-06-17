@@ -7,11 +7,11 @@ let currentUser = null;
 
 const ROLE_PERMISSIONS = {
   stock_receiver: ['in', 'pending', 'po_status', 'stock'],
-  center_staff: ['out', 'request_status', 'transfer', 'po_status', 'stock'],
+  center_staff: ['out', 'request_status', 'transfer', 'po_status', 'stock', 'withdraw_summary'],
   committee: ['stock'],
 
-  admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'committee'],
-  adminR: ['in', 'pending', 'transfer', 'po_status', 'stock'],
+  admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary', 'committee'],
+  adminR: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary'],
 
   pr_approver: ['pr_approval'],
   pr_po_manager: ['pr_approved', 'pr_open_po', 'stock', 'pr_add_data', 'pr_export_data'],
@@ -288,6 +288,8 @@ function applyPermissionUI() {
     button.classList.toggle('is-disabled', !allowed);
   });
 
+  applyRoleTabOrder();
+
   const tabBox = document.querySelector('.segment')?.parentElement;
 
   if (tabBox) {
@@ -307,6 +309,7 @@ function applyPermissionUI() {
 
   if (currentUser.role === 'center_staff') {
     lockSelectToValue('out-center', currentUser.center);
+    lockSelectToValue('withdraw-summary-center', currentUser.center);
     lockSelectToValue('transfer-from-center', currentUser.center);
     unlockSelect('stock-center-filter');
     setStockCenterDefaultToOwnCenter();
@@ -314,6 +317,7 @@ function applyPermissionUI() {
     filterTransferTargetCenters();
   } else {
     unlockSelect('out-center');
+    unlockSelect('withdraw-summary-center');
     unlockSelect('transfer-from-center');
     unlockSelect('transfer-to-center');
     unlockSelect('stock-center-filter');
@@ -322,6 +326,21 @@ function applyPermissionUI() {
 
   const firstAllowedTab = currentUser.permissions[0] || 'in';
   switchTab(firstAllowedTab, true);
+}
+
+function applyRoleTabOrder() {
+  const orderByRole = {
+    center_staff: ['out', 'request_status', 'transfer', 'po_status', 'stock', 'withdraw_summary'],
+    admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary', 'committee'],
+    adminR: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary'],
+    stock_receiver: ['in', 'pending', 'po_status', 'stock'],
+  };
+  const order = orderByRole[currentUser?.role] || currentUser?.permissions || [];
+
+  document.querySelectorAll('[data-tab]').forEach((button) => {
+    const index = order.indexOf(button.dataset.tab);
+    button.style.order = index >= 0 ? String(index + 1) : '';
+  });
 }
 
 function setStockCenterDefaultToOwnCenter() {

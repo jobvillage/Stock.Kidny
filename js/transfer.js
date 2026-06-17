@@ -2297,6 +2297,18 @@ function renderAdminTransferForm() {
           <input type="date" id="transfer-history-date" />
         </div>
 
+        <div class="field-group">
+          <label for="transfer-history-center">ศูนย์</label>
+          <select id="transfer-history-center">
+            <option value="">ทุกศูนย์</option>
+            <option value="Hub Admin">Hub Admin</option>
+            <option value="สต็อกใหญ่">สต็อกใหญ่</option>
+            <option value="ไตบน">ไตบน</option>
+            <option value="ไตล่าง">ไตล่าง</option>
+            <option value="ไตดี">ไตดี</option>
+          </select>
+        </div>
+
         <button class="btn-request-secondary transfer-history-refresh" id="btn-transfer-history-search" type="button">
           <span>ค้นหา</span>
           <strong>เรียกดูรายการ</strong>
@@ -2325,6 +2337,7 @@ function renderAdminTransferForm() {
   });
   document.getElementById('btn-transfer-history-search')?.addEventListener('click', fetchTransferTransactionHistory);
   document.getElementById('transfer-history-date')?.addEventListener('change', fetchTransferTransactionHistory);
+  document.getElementById('transfer-history-center')?.addEventListener('change', fetchTransferTransactionHistory);
   document.getElementById('transfer-history-product')?.addEventListener('change', fetchTransferTransactionHistory);
   enhanceStockProductFilter(document.getElementById('transfer-convert-from'));
   enhanceStockProductFilter(document.getElementById('transfer-convert-to'));
@@ -2412,6 +2425,43 @@ function getTransferHistoryActionClass(action = '') {
   return '';
 }
 
+function populateTransactionHistoryProductSelect(select) {
+  if (!select) return;
+
+  const currentValue = select.value;
+  if (select.tomselect) {
+    select.tomselect.destroy();
+  }
+
+  select.innerHTML = `
+    <option value="">— เลือกรายการสินค้า —</option>
+    ${typeof getProductOptions === 'function' ? getProductOptions() : ''}
+  `;
+
+  if (currentValue) select.value = currentValue;
+
+  enhanceStockProductFilter(select);
+}
+
+function initStaffOutTransactionHistory() {
+  const productSelect = document.getElementById('staff-transaction-history-product');
+  const searchButton = document.getElementById('btn-staff-transaction-history-search');
+  const dateInput = document.getElementById('staff-transaction-history-date');
+  const centerSelect = document.getElementById('staff-transaction-history-center');
+
+  if (!productSelect) return;
+
+  populateTransactionHistoryProductSelect(productSelect);
+
+  if (productSelect.dataset.historyReady === '1') return;
+  productSelect.dataset.historyReady = '1';
+
+  searchButton?.addEventListener('click', fetchStaffOutTransactionHistory);
+  dateInput?.addEventListener('change', fetchStaffOutTransactionHistory);
+  centerSelect?.addEventListener('change', fetchStaffOutTransactionHistory);
+  productSelect?.addEventListener('change', fetchStaffOutTransactionHistory);
+}
+
 function renderTransferTransactionHistory(records = []) {
   if (!records.length) {
     return '<div class="empty-state">ไม่พบรายการ Transaction ตามตัวกรอง</div>';
@@ -2458,13 +2508,14 @@ function renderTransferTransactionHistory(records = []) {
   `;
 }
 
-async function fetchTransferTransactionHistory() {
-  const box = document.getElementById('transfer-history-list');
+async function fetchTransactionHistoryForPanel(config = {}) {
+  const box = document.getElementById(config.listId || 'transfer-history-list');
   if (!box || typeof supabaseClient === 'undefined') return;
 
-  const selectedProduct = String(document.getElementById('transfer-history-product')?.value || '').trim();
+  const selectedProduct = String(document.getElementById(config.productId || 'transfer-history-product')?.value || '').trim();
   const cleanSelectedProduct = cleanTransferHistoryProductName(selectedProduct);
-  const dateText = document.getElementById('transfer-history-date')?.value || '';
+  const dateText = document.getElementById(config.dateId || 'transfer-history-date')?.value || '';
+  const selectedCenter = cleanTransferHistoryProductName(document.getElementById(config.centerId || 'transfer-history-center')?.value || '');
 
   if (!cleanSelectedProduct) {
     box.innerHTML = '<div class="empty-state">เลือกรายการสินค้าเพื่อเรียกดูประวัติ วันที่เป็นตัวกรองเสริม</div>';
@@ -2507,7 +2558,14 @@ async function fetchTransferTransactionHistory() {
         if (!allowedActions.has(cleanTransferHistoryAction(tx.action))) return false;
         const cleanProduct = cleanTransferHistoryProductName(tx.product);
         const cleanBalanceProduct = cleanTransferHistoryProductName(tx.stock_balance_product);
-        return (cleanProduct && (
+        const sourceCenter = cleanTransferHistoryProductName(getTransferHistorySource(tx));
+        const destinationCenter = cleanTransferHistoryProductName(getTransferHistoryDestination(tx));
+        const matchesCenter = !selectedCenter
+          || sourceCenter === selectedCenter
+          || destinationCenter === selectedCenter
+          || cleanTransferHistoryProductName(tx.stock_balance_center) === selectedCenter;
+
+        return matchesCenter && ((cleanProduct && (
           cleanProduct === cleanSelectedProduct
           || cleanProduct.includes(cleanSelectedProduct)
           || cleanSelectedProduct.includes(cleanProduct)
@@ -2515,7 +2573,7 @@ async function fetchTransferTransactionHistory() {
           cleanBalanceProduct === cleanSelectedProduct
           || cleanBalanceProduct.includes(cleanSelectedProduct)
           || cleanSelectedProduct.includes(cleanBalanceProduct)
-        ));
+        )));
       });
 
     if (!records.length) {
@@ -2556,7 +2614,14 @@ async function fetchTransferTransactionHistory() {
           if (!allowedActions.has(cleanTransferHistoryAction(tx.action))) return false;
           const cleanProduct = cleanTransferHistoryProductName(tx.product);
           const cleanBalanceProduct = cleanTransferHistoryProductName(tx.stock_balance_product);
-          return (cleanProduct && (
+          const sourceCenter = cleanTransferHistoryProductName(getTransferHistorySource(tx));
+          const destinationCenter = cleanTransferHistoryProductName(getTransferHistoryDestination(tx));
+          const matchesCenter = !selectedCenter
+            || sourceCenter === selectedCenter
+            || destinationCenter === selectedCenter
+            || cleanTransferHistoryProductName(tx.stock_balance_center) === selectedCenter;
+
+          return matchesCenter && ((cleanProduct && (
             cleanProduct === cleanSelectedProduct
             || cleanProduct.includes(cleanSelectedProduct)
             || cleanSelectedProduct.includes(cleanProduct)
@@ -2564,7 +2629,7 @@ async function fetchTransferTransactionHistory() {
             cleanBalanceProduct === cleanSelectedProduct
             || cleanBalanceProduct.includes(cleanSelectedProduct)
             || cleanSelectedProduct.includes(cleanBalanceProduct)
-          ));
+          )));
         });
 
       box.innerHTML = renderTransferTransactionHistory(fallbackRecords);
@@ -2577,6 +2642,24 @@ async function fetchTransferTransactionHistory() {
     console.error('fetchTransferTransactionHistory error:', error);
     box.innerHTML = `<div class="empty-state error-state">❌ ${escapeHtml(error.message || 'โหลดรายการ Transaction ไม่สำเร็จ')}</div>`;
   }
+}
+
+async function fetchTransferTransactionHistory() {
+  return fetchTransactionHistoryForPanel({
+    listId: 'transfer-history-list',
+    productId: 'transfer-history-product',
+    dateId: 'transfer-history-date',
+    centerId: 'transfer-history-center',
+  });
+}
+
+async function fetchStaffOutTransactionHistory() {
+  return fetchTransactionHistoryForPanel({
+    listId: 'staff-transaction-history-list',
+    productId: 'staff-transaction-history-product',
+    dateId: 'staff-transaction-history-date',
+    centerId: 'staff-transaction-history-center',
+  });
 }
 
 function getPoCenter(po = {}) {

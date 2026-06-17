@@ -72,6 +72,10 @@
           <span class="segment-icon">📤</span>
           <span>ใบขอเบิก</span>
         </button>
+        <button class="segment" type="button" data-tab="withdraw_summary" id="tab-withdraw-summary">
+          <span class="segment-icon">📊</span>
+          <span>สรุปยอดเบิก</span>
+        </button>
         <button class="segment" type="button" data-tab="request_status" id="tab-request-status">
           <span class="segment-icon">✅</span>
           <span>สถานะใบขอเบิก</span>
@@ -272,6 +276,120 @@
           <span>บันทึกการเบิกสินค้า</span>
         </button>
 
+        <div class="section-divider"></div>
+
+        <section class="transfer-history-panel staff-transaction-history-panel">
+          <div class="panel-title compact-title">
+            <span class="title-icon">📋</span>
+            <div>
+              <h2>รายการ Transaction ย้อนหลัง</h2>
+              <p>ค้นหาประวัติการตัดสต็อกและการโอนย้ายสินค้า</p>
+            </div>
+          </div>
+
+          <div class="transfer-history-filters">
+            <div class="field-group">
+              <label for="staff-transaction-history-product">รายการสินค้า</label>
+              <select id="staff-transaction-history-product" class="product-select">
+                <option value="">— เลือกรายการสินค้า —</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label for="staff-transaction-history-date">วันที่</label>
+              <input type="date" id="staff-transaction-history-date" />
+            </div>
+
+            <div class="field-group">
+              <label for="staff-transaction-history-center">ศูนย์</label>
+              <select id="staff-transaction-history-center">
+                <option value="">ทุกศูนย์</option>
+                <option value="Hub Admin">Hub Admin</option>
+                <option value="สต็อกใหญ่">สต็อกใหญ่</option>
+                <option value="ไตบน">ไตบน</option>
+                <option value="ไตล่าง">ไตล่าง</option>
+                <option value="ไตดี">ไตดี</option>
+              </select>
+            </div>
+
+            <button class="btn-request-secondary transfer-history-refresh" id="btn-staff-transaction-history-search" type="button">
+              <span>ค้นหา</span>
+              <strong>เรียกดูรายการ</strong>
+            </button>
+          </div>
+
+          <div id="staff-transaction-history-list" class="transfer-history-list">
+            <div class="empty-state">เลือกรายการสินค้าเพื่อเรียกดูประวัติ วันที่เป็นตัวกรองเสริม</div>
+          </div>
+        </section>
+
+      </section>
+
+      <section class="panel panel-withdraw-summary" id="panel-withdraw-summary" data-panel="withdraw_summary">
+        <div class="panel-title">
+          <span class="title-icon withdraw-summary">📊</span>
+          <div>
+            <h2>สรุปยอดเบิก</h2>
+            <p>สรุปรายการเบิกของประจำวัน พร้อมสถานะการตัดสต็อกและยอดคงเหลือหลังตัด</p>
+          </div>
+        </div>
+
+        <div class="withdraw-summary-toolbar">
+          <div class="field-group">
+            <label for="withdraw-summary-date">วันที่</label>
+            <input type="date" id="withdraw-summary-date" />
+          </div>
+
+          <div class="field-group">
+            <label for="withdraw-summary-center">ศูนย์</label>
+            <select id="withdraw-summary-center">
+              <option value="">ทุกศูนย์</option>
+              <option value="ไตบน">ไตบน</option>
+              <option value="ไตล่าง">ไตล่าง</option>
+              <option value="ไตดี">ไตดี</option>
+            </select>
+          </div>
+
+          <div class="field-group">
+            <label for="withdraw-summary-product">สินค้า</label>
+            <select id="withdraw-summary-product" class="product-select">
+              <option value="">ทุกสินค้า</option>
+            </select>
+          </div>
+
+          <button class="btn-request-secondary withdraw-summary-refresh" id="btn-withdraw-summary-refresh" type="button">
+            <span>ค้นหา</span>
+            <strong>เรียกดูสรุป</strong>
+          </button>
+
+          <button class="btn-request-secondary withdraw-summary-print" id="btn-withdraw-summary-print" type="button">
+            <span>ปริ้นท์</span>
+            <strong>สรุป</strong>
+          </button>
+        </div>
+
+        <div id="withdraw-summary-list" class="withdraw-summary-grid">
+          <article class="withdraw-summary-card is-placeholder">
+            <div class="withdraw-summary-card-top">
+              <div>
+                <span>รายการเบิกของประจำวัน</span>
+                <strong>รอเรียกดูข้อมูล</strong>
+              </div>
+              <span class="withdraw-status-pill is-pending">ยังไม่ตัดสต็อก</span>
+            </div>
+            <div class="withdraw-summary-card-body">
+              <div>
+                <span>จำนวนที่เบิก</span>
+                <strong>-</strong>
+              </div>
+              <div>
+                <span>ยอดคงเหลือหลังตัด</span>
+                <strong>-</strong>
+              </div>
+            </div>
+            <p>เลือกวันที่และศูนย์เพื่อแสดงการ์ดสรุปแยกตามรายการสินค้า</p>
+          </article>
+        </div>
       </section>
 
       <section class="panel panel-transfer" id="panel-transfer" data-panel="transfer">

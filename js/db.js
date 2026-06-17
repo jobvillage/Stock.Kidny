@@ -178,6 +178,12 @@ async function fetchStock() {
     refreshInBadges();
     refreshOutInfo();
     refreshTransferInfo();
+    if (typeof initStaffOutTransactionHistory === 'function') {
+      initStaffOutTransactionHistory();
+    }
+    if (typeof initWithdrawSummaryProductFilter === 'function') {
+      initWithdrawSummaryProductFilter();
+    }
     renderStockDashboard();
     fetchPendingPoSummary();
     renderHubStockDashboard();

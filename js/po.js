@@ -5,6 +5,16 @@ const PR_APPROVER_BY_CODE = {
   user2: 'toy',
 };
 
+const prApprovalApprovedFilters = {
+  date: getPrTodayDate(),
+  prId: '',
+};
+
+const prManagerApprovedFilters = {
+  date: getPrTodayDate(),
+  prId: '',
+};
+
 const PR_CENTER_DISPLAY_NAME = {
   'ไตล่าง': 'บริษัท ลำพูนเพื่อนไต จำกัด',
   'ไตบน': 'บริษัท คิดนี่แคร์ลำพูน จำกัด',
@@ -214,7 +224,7 @@ function ensurePrPanel(tab, className = '') {
 function renderPrApprovalPanels() {
   const panel = ensurePrPanel('pr_approval', 'panel-pr-approval');
   const pendingRecords = prApprovalRecords.filter(isPrPendingRecord);
-  const approvedRecords = prApprovalRecords.filter(isPrApprovedRecord);
+  const approvedRecords = filterPrApprovalApprovedRecords(prApprovalRecords.filter(isPrApprovedRecord));
 
   panel.innerHTML = `
     <div class="panel-title">
@@ -230,6 +240,8 @@ function renderPrApprovalPanels() {
       ${renderPrApprovalSection('PR ที่อนุมัติแล้ว', 'อนุมัติแล้ว', 'approved', approvedRecords)}
     </div>
   `;
+
+  bindPrApprovalApprovedFilters();
 }
 
 async function fetchPrApprovalRecords() {
@@ -413,6 +425,7 @@ function normalizePrOpenedPoRecord(raw = {}) {
 
 function renderPrApprovalSection(title, status, variant, records = []) {
   const totalItems = records.reduce((sum, record) => sum + record.items.length, 0);
+  const filterMarkup = variant === 'approved' ? renderPrApprovalApprovedFilterBar() : '';
 
   return `
     <section class="pr-main-card pr-approval-section pr-approval-board" data-pr-section="${escapeHtml(variant)}" data-pr-status="${escapeHtml(variant)}">
@@ -424,6 +437,8 @@ function renderPrApprovalSection(title, status, variant, records = []) {
         <span class="pr-status-pill ${variant === 'approved' ? 'is-approved' : ''}">${escapeHtml(status)}</span>
       </div>
 
+      ${filterMarkup}
+
       <div class="pr-po-list" data-pr-list="${escapeHtml(variant)}">
         ${records.length
           ? records.map((record) => renderPrApprovalPoCard(record, variant)).join('')
@@ -432,6 +447,64 @@ function renderPrApprovalSection(title, status, variant, records = []) {
       </div>
     </section>
   `;
+}
+
+function filterPrApprovalApprovedRecords(records = []) {
+  const dateFilter = String(prApprovalApprovedFilters.date || '').trim();
+  const prIdFilter = String(prApprovalApprovedFilters.prId || '').trim().toLowerCase();
+
+  return records.filter((record) => {
+    const matchesDate = !dateFilter || String(record.po_date || '') === dateFilter;
+    const matchesPrId = !prIdFilter || String(record.po_id || '').toLowerCase().includes(prIdFilter);
+    return matchesDate && matchesPrId;
+  });
+}
+
+function renderPrApprovalApprovedFilterBar() {
+  return `
+    <div class="pr-approved-filter-bar">
+      <div class="field-group">
+        <label for="pr-approved-filter-date">วันที่ PR</label>
+        <input
+          id="pr-approved-filter-date"
+          type="date"
+          value="${escapeHtml(prApprovalApprovedFilters.date || '')}"
+        />
+      </div>
+      <div class="field-group">
+        <label for="pr-approved-filter-id">เลข PR</label>
+        <input
+          id="pr-approved-filter-id"
+          type="text"
+          value="${escapeHtml(prApprovalApprovedFilters.prId || '')}"
+          placeholder="เช่น PR-20260617-001"
+        />
+      </div>
+      <button class="btn-request-secondary pr-approved-filter-button" id="btn-pr-approved-filter" type="button">
+        <span>ค้นหา</span>
+        <strong>เรียกดู PR</strong>
+      </button>
+    </div>
+  `;
+}
+
+function bindPrApprovalApprovedFilters() {
+  const dateInput = document.getElementById('pr-approved-filter-date');
+  const prIdInput = document.getElementById('pr-approved-filter-id');
+  const button = document.getElementById('btn-pr-approved-filter');
+
+  const applyFilters = () => {
+    prApprovalApprovedFilters.date = dateInput?.value || '';
+    prApprovalApprovedFilters.prId = prIdInput?.value.trim() || '';
+    renderPrApprovalPanels();
+  };
+
+  button?.addEventListener('click', applyFilters);
+  [dateInput, prIdInput].forEach((input) => {
+    input?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') applyFilters();
+    });
+  });
 }
 
 function renderPrApprovalPoCard(record, variant) {
@@ -472,12 +545,10 @@ function renderPrApprovalPoCard(record, variant) {
         ${companyButtons || '<div class="empty-state">ไม่มีรายการสินค้าในใบนี้</div>'}
       </div>
 
-      ${variant === 'approved' ? '' : `
-        <div class="pr-approval-board-actions">
-          ${renderPrApproverButton(record, 'daeng', 'พี่แดงอนุมัติ')}
-          ${renderPrApproverButton(record, 'toy', 'พี่ต้อยอนุมัติ')}
-        </div>
-      `}
+      <div class="pr-approval-board-actions">
+        ${renderPrApproverButton(record, 'daeng', 'พี่แดงอนุมัติ')}
+        ${renderPrApproverButton(record, 'toy', 'พี่ต้อยอนุมัติ')}
+      </div>
     </article>
   `;
 }
@@ -733,7 +804,7 @@ function renderPrManagerPanels() {
 function renderApprovedPrPanel() {
   const panel = ensurePrPanel('pr_approved', 'panel-pr-approved');
   const pendingRecords = prApprovalRecords.filter(isPrPendingRecord);
-  const approvedRecords = prApprovalRecords.filter(isPrApprovedRecord);
+  const approvedRecords = filterPrManagerApprovedRecords(prApprovalRecords.filter(isPrApprovedRecord));
 
   panel.innerHTML = `
     <div class="panel-title">
@@ -750,10 +821,13 @@ function renderApprovedPrPanel() {
 
     ${renderPrManagerStatusSection('PR ที่อนุมัติแล้ว', 'อนุมัติแล้ว', 'approved', approvedRecords)}
   `;
+
+  bindPrManagerApprovedFilters();
 }
 
 function renderPrManagerStatusSection(title, status, variant, records = []) {
   const totalItems = records.reduce((sum, record) => sum + record.items.length, 0);
+  const filterMarkup = variant === 'approved' ? renderPrManagerApprovedFilterBar() : '';
 
   return `
     <section class="pr-main-card pr-approval-section pr-approval-board" data-pr-manager-section="${escapeHtml(variant)}">
@@ -765,6 +839,8 @@ function renderPrManagerStatusSection(title, status, variant, records = []) {
         <span class="pr-status-pill ${variant === 'approved' ? 'is-approved' : ''}">${escapeHtml(status)}</span>
       </div>
 
+      ${filterMarkup}
+
       <div class="pr-card-list">
         ${records.length
           ? records.map((record) => renderApprovedPrStatusCard(record, variant)).join('')
@@ -773,6 +849,64 @@ function renderPrManagerStatusSection(title, status, variant, records = []) {
       </div>
     </section>
   `;
+}
+
+function filterPrManagerApprovedRecords(records = []) {
+  const dateFilter = String(prManagerApprovedFilters.date || '').trim();
+  const prIdFilter = String(prManagerApprovedFilters.prId || '').trim().toLowerCase();
+
+  return records.filter((record) => {
+    const matchesDate = !dateFilter || String(record.po_date || '') === dateFilter;
+    const matchesPrId = !prIdFilter || String(record.po_id || '').toLowerCase().includes(prIdFilter);
+    return matchesDate && matchesPrId;
+  });
+}
+
+function renderPrManagerApprovedFilterBar() {
+  return `
+    <div class="pr-approved-filter-bar">
+      <div class="field-group">
+        <label for="pr-manager-approved-filter-date">วันที่ PR</label>
+        <input
+          id="pr-manager-approved-filter-date"
+          type="date"
+          value="${escapeHtml(prManagerApprovedFilters.date || '')}"
+        />
+      </div>
+      <div class="field-group">
+        <label for="pr-manager-approved-filter-id">เลข PR</label>
+        <input
+          id="pr-manager-approved-filter-id"
+          type="text"
+          value="${escapeHtml(prManagerApprovedFilters.prId || '')}"
+          placeholder="เช่น PR-20260617-001"
+        />
+      </div>
+      <button class="btn-request-secondary pr-approved-filter-button" id="btn-pr-manager-approved-filter" type="button">
+        <span>ค้นหา</span>
+        <strong>เรียกดู PR</strong>
+      </button>
+    </div>
+  `;
+}
+
+function bindPrManagerApprovedFilters() {
+  const dateInput = document.getElementById('pr-manager-approved-filter-date');
+  const prIdInput = document.getElementById('pr-manager-approved-filter-id');
+  const button = document.getElementById('btn-pr-manager-approved-filter');
+
+  const applyFilters = () => {
+    prManagerApprovedFilters.date = dateInput?.value || '';
+    prManagerApprovedFilters.prId = prIdInput?.value.trim() || '';
+    renderApprovedPrPanel();
+  };
+
+  button?.addEventListener('click', applyFilters);
+  [dateInput, prIdInput].forEach((input) => {
+    input?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') applyFilters();
+    });
+  });
 }
 
 function renderApprovedPrStatusCard(record, variant = 'approved') {
@@ -3007,16 +3141,23 @@ async function fetchAddDataProductVendorMeta(product) {
   try {
     const { data, error } = await supabaseClient
       .from('vendor_products')
-      .select('unit, product_type, default_location, cost_qty, cost_unit_qty, cost_unit_price, cost_total_price, cost_unit, vendors(vendor_name, address_1, address_2, phone, email)')
+      .select('unit, product_type, default_location, cost_qty, cost_unit_qty, cost_unit_price, cost_total_price, cost_unit, updated_at, vendors(vendor_name, address_1, address_2, phone, email)')
       .eq('product', product)
       .eq('is_active', true)
-      .limit(1);
+      .order('updated_at', { ascending: false })
+      .limit(20);
 
     if (error) {
       throw error;
     }
 
-    const row = Array.isArray(data) ? data[0] : null;
+    const rows = Array.isArray(data) ? data : [];
+    const row = rows.find((item) => {
+      const vendor = Array.isArray(item.vendors) ? item.vendors[0] : item.vendors;
+      const vendorName = String(vendor?.vendor_name || '').trim();
+      return vendorName && vendorName !== 'ไม่ระบุบริษัท';
+    }) || rows[0] || null;
+
     if (!row) return null;
 
     const vendor = Array.isArray(row.vendors) ? row.vendors[0] : row.vendors;
@@ -3214,5 +3355,3 @@ async function saveAddDataVendorProduct(button) {
     if (button) button.disabled = false;
   }
 }
-
-
