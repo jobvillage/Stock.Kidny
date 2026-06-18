@@ -55,6 +55,26 @@ function refreshStockProductFilter() {
   enhanceStockProductFilter(select);
 }
 
+function refreshStockProductTypeFilter() {
+  const select = document.getElementById('stock-product-type-filter');
+  if (!select) return;
+
+  const oldValue = select.value;
+  const productTypes = [...new Set(
+    Object.values(localStockTypes || {})
+      .flatMap((centerTypes) => Object.values(centerTypes || {}))
+      .map((type) => String(type || '').trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, 'th'));
+
+  select.innerHTML = `
+    <option value="">ทุกประเภท</option>
+    ${productTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('')}
+  `;
+
+  select.value = productTypes.includes(oldValue) ? oldValue : '';
+}
+
 function enhanceStockProductFilter(select) {
   if (!select || select.tomselect || typeof TomSelect === 'undefined') return;
 

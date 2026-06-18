@@ -79,6 +79,9 @@ function loadStockCache() {
     refreshInBadges();
     refreshOutInfo();
     refreshTransferInfo();
+    if (typeof refreshStockProductTypeFilter === 'function') {
+      refreshStockProductTypeFilter();
+    }
 
     setSyncStatus('โหลดข้อมูลจากเครื่องแล้ว กำลังซิงก์...', 'loading');
     return true;
@@ -178,6 +181,9 @@ async function fetchStock() {
     refreshInBadges();
     refreshOutInfo();
     refreshTransferInfo();
+    if (typeof refreshStockProductTypeFilter === 'function') {
+      refreshStockProductTypeFilter();
+    }
     if (typeof initStaffOutTransactionHistory === 'function') {
       initStaffOutTransactionHistory();
     }
