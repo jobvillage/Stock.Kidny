@@ -13,7 +13,7 @@ const ROLE_PERMISSIONS = {
   admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary', 'committee'],
   adminR: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary'],
 
-  pr_approver: ['pr_approval'],
+  pr_approver: ['pr_approval', 'stock'],
   pr_po_manager: ['pr_approved', 'pr_open_po', 'stock', 'pr_add_data', 'pr_export_data'],
 };
 
@@ -106,6 +106,10 @@ async function login() {
 }
 
 async function logout() {
+  if (typeof cleanupPrintArtifacts === 'function') {
+    cleanupPrintArtifacts();
+  }
+
   stopAutoRefresh();
   localStorage.removeItem(AUTH_SESSION_KEY);
   currentUser = null;
@@ -155,11 +159,27 @@ function restoreSession() {
 }
 
 function showLoginScreen() {
+  if (typeof cleanupPrintArtifacts === 'function') {
+    cleanupPrintArtifacts();
+  }
+
   const loginScreen = document.getElementById('login-screen');
   const appShell = document.getElementById('app-shell');
 
   if (loginScreen) loginScreen.hidden = false;
   if (appShell) appShell.hidden = true;
+
+  requestAnimationFrame(() => {
+    if (typeof resetLoginInputsAfterPrint === 'function') {
+      resetLoginInputsAfterPrint();
+    }
+
+    const codeInput = document.getElementById('login-code');
+    if (!codeInput) return;
+    codeInput.disabled = false;
+    codeInput.readOnly = false;
+    codeInput.focus();
+  });
 }
 
 function applyRolePageLabels() {
@@ -334,6 +354,7 @@ function applyRoleTabOrder() {
     admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary', 'committee'],
     adminR: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary'],
     stock_receiver: ['in', 'pending', 'po_status', 'stock'],
+    pr_approver: ['pr_approval', 'stock'],
   };
   const order = orderByRole[currentUser?.role] || currentUser?.permissions || [];
 

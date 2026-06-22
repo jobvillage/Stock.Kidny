@@ -131,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
       addProductRow('transfer');
 
       bindStaticEvents();
+      bindPrintRecoveryEvents();
       restoreSession();
     })
     .catch((error) => {
@@ -388,6 +389,201 @@ function initWithdrawSummaryProductFilter() {
   }
 }
 
+function cleanupPrintArtifacts() {
+  document.querySelectorAll('iframe[id$="print-frame"], iframe[data-print-frame="1"]').forEach((frame) => {
+    frame.remove();
+  });
+
+  document.body.classList.remove('is-printing', 'print-mode');
+  document.documentElement.classList.remove('is-printing', 'print-mode');
+  document.body.style.pointerEvents = '';
+  document.body.style.overflow = '';
+
+  ['login-screen', 'app-shell'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.inert = false;
+    el.style.pointerEvents = '';
+  });
+
+  ['login-code', 'login-password', 'btn-login'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = false;
+    el.readOnly = false;
+    el.style.pointerEvents = '';
+  });
+}
+
+function resetLoginInputsAfterPrint() {
+  const loginScreen = document.getElementById('login-screen');
+  if (!loginScreen || loginScreen.hidden) return;
+
+  cleanupPrintArtifacts();
+
+  const codeInput = document.getElementById('login-code');
+  const passwordInput = document.getElementById('login-password');
+  const loginButton = document.getElementById('btn-login');
+
+  [codeInput, passwordInput, loginButton].forEach((el) => {
+    if (!el) return;
+    el.disabled = false;
+    el.readOnly = false;
+    el.removeAttribute('inert');
+    el.style.pointerEvents = '';
+    el.style.webkitUserSelect = '';
+    el.style.userSelect = '';
+  });
+}
+
+function bindPrintRecoveryEvents() {
+  const recover = () => {
+    setTimeout(resetLoginInputsAfterPrint, 0);
+    setTimeout(resetLoginInputsAfterPrint, 180);
+  };
+
+  window.addEventListener('pageshow', recover);
+  window.addEventListener('focus', recover);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) recover();
+  });
+
+  ['login-code', 'login-password'].forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+
+    input.addEventListener('pointerdown', () => {
+      resetLoginInputsAfterPrint();
+      setTimeout(() => input.focus(), 0);
+    });
+
+    input.addEventListener('touchstart', () => {
+      resetLoginInputsAfterPrint();
+      setTimeout(() => input.focus(), 0);
+    }, { passive: true });
+  });
+}
+
+function preparePrintHtml(html) {
+  const sourceHtml = String(html || '');
+  if (/window\.print\s*\(/i.test(sourceHtml)) {
+    return sourceHtml;
+  }
+
+  const printScript = `
+      <script>
+        window.onload = function () {
+          window.focus();
+          window.print();
+        };
+      </script>
+  `;
+
+  if (/<\/body>/i.test(sourceHtml)) {
+    return sourceHtml.replace(/<\/body>/i, `${printScript}</body>`);
+  }
+
+  return `${sourceHtml}${printScript}`;
+}
+
+function extractManagedPrintParts(html) {
+  const sourceHtml = String(html || '');
+  const styles = [...sourceHtml.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)]
+    .map((match) => match[1])
+    .join('\n');
+  const bodyMatch = sourceHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const bodyHtml = (bodyMatch ? bodyMatch[1] : sourceHtml)
+    .replace(/<script[\s\S]*?<\/script>/gi, '');
+
+  return { styles, bodyHtml };
+}
+
+function shouldOpenPrintInNewTab() {
+  const isTouchDevice = Number(navigator.maxTouchPoints || 0) > 0
+    || window.matchMedia?.('(pointer: coarse)')?.matches;
+  return Boolean(isTouchDevice || window.innerWidth <= 820);
+}
+
+function openPrintHtmlInNewTab(html, popupMessage, reservedPrintWindow = null) {
+  const printWindow = reservedPrintWindow || window.open('', '_blank');
+
+  if (!printWindow) {
+    if (typeof showToast === 'function') showToast(`⚠️ ${popupMessage}`, 'error');
+    return null;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(preparePrintHtml(html));
+  printWindow.document.close();
+  printWindow.focus();
+
+  return printWindow;
+}
+
+function openManagedPrintWindow(html, popupMessage = 'ไม่สามารถพิมพ์เอกสารได้', features = '', reservedPrintWindow = null) {
+  cleanupPrintArtifacts();
+
+  if (reservedPrintWindow || shouldOpenPrintInNewTab()) {
+    return openPrintHtmlInNewTab(html, popupMessage, reservedPrintWindow);
+  }
+
+  const { styles, bodyHtml } = extractManagedPrintParts(html);
+  const printRoot = document.createElement('div');
+  printRoot.id = 'managed-print-root';
+  printRoot.setAttribute('aria-hidden', 'true');
+  printRoot.innerHTML = bodyHtml;
+
+  const printStyle = document.createElement('style');
+  printStyle.id = 'managed-print-style';
+  printStyle.textContent = `
+    #managed-print-root {
+      display: none;
+    }
+
+    @media print {
+      body.is-printing > *:not(#managed-print-root) {
+        display: none !important;
+      }
+
+      #managed-print-root {
+        display: block !important;
+      }
+
+      ${styles}
+    }
+  `;
+
+  document.head.appendChild(printStyle);
+  document.body.appendChild(printRoot);
+  document.body.classList.add('is-printing');
+  document.documentElement.classList.add('is-printing');
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    printRoot.remove();
+    printStyle.remove();
+    cleanupPrintArtifacts();
+    resetLoginInputsAfterPrint();
+  };
+
+  window.addEventListener('afterprint', cleanup, { once: true });
+
+  try {
+    window.focus();
+    window.print();
+  } catch (error) {
+    console.warn('managed print failed:', error);
+    cleanup();
+    if (typeof showToast === 'function') showToast(`⚠️ ${popupMessage}`, 'error');
+    return null;
+  }
+
+  setTimeout(cleanup, 5000);
+  return window;
+}
+
 function getWithdrawSummaryUnit(center, product, fallback = '') {
   if (fallback) return fallback;
   if (typeof getStockUnit === 'function') {
@@ -623,50 +819,15 @@ function printWithdrawSummary() {
     </html>
   `;
 
-  const oldFrame = document.getElementById('withdraw-summary-print-frame');
-  if (oldFrame) oldFrame.remove();
+  const printWindow = typeof openManagedPrintWindow === 'function'
+    ? openManagedPrintWindow(html, 'ไม่สามารถเปิดหน้าพิมพ์สรุปยอดเบิกได้', 'width=1100,height=780')
+    : null;
 
-  const printFrame = document.createElement('iframe');
-  printFrame.id = 'withdraw-summary-print-frame';
-  printFrame.style.position = 'fixed';
-  printFrame.style.right = '0';
-  printFrame.style.bottom = '0';
-  printFrame.style.width = '0';
-  printFrame.style.height = '0';
-  printFrame.style.border = '0';
-  printFrame.style.opacity = '0';
-  printFrame.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(printFrame);
-
-  const frameWindow = printFrame.contentWindow;
-  const frameDocument = frameWindow?.document;
-  if (!frameWindow || !frameDocument) {
-    printFrame.remove();
-    showToast('⚠️ ไม่สามารถเปิดหน้าพิมพ์สรุปยอดเบิกได้', 'error');
-    return;
-  }
-
-  const cleanupPrintFrame = () => {
+  if (printWindow) {
     setTimeout(() => {
-      printFrame.remove();
-      window.focus();
       document.getElementById('withdraw-summary-center')?.focus();
-    }, 250);
-  };
-
-  frameWindow.addEventListener('afterprint', cleanupPrintFrame, { once: true });
-  frameDocument.open();
-  frameDocument.write(html);
-  frameDocument.close();
-
-  setTimeout(() => {
-    frameWindow.focus();
-    frameWindow.print();
-  }, 250);
-
-  setTimeout(() => {
-    if (document.body.contains(printFrame)) cleanupPrintFrame();
-  }, 3000);
+    }, 300);
+  }
 }
 
 async function renderWithdrawSummaryScaffold() {

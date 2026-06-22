@@ -813,18 +813,12 @@ function printStockView() {
   const stockSection = document.querySelector('#panel-stock .stock-view-section');
   if (!stockSection) return;
 
-  const printWindow = window.open('', '_blank', 'width=1100,height=780');
-  if (!printWindow) {
-    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อปริ้นท์สต็อก', 'error');
-    return;
-  }
-
   const printedAt = new Date().toLocaleString('th-TH');
   const center = currentUser?.role === 'center_staff'
     ? currentUser.center
     : (document.getElementById('stock-center-filter')?.value || 'ทุกสต็อก');
 
-  printWindow.document.write(`
+  const html = `
     <!DOCTYPE html>
     <html lang="th">
     <head>
@@ -898,11 +892,11 @@ function printStockView() {
       ${stockSection.innerHTML}
     </body>
     </html>
-  `);
+  `;
 
-  printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
+  if (typeof openManagedPrintWindow === 'function') {
+    openManagedPrintWindow(html, 'ไม่สามารถปริ้นท์สต็อกได้', 'width=1100,height=780');
+  }
 }
 
 function renderStockViewTransfers() {

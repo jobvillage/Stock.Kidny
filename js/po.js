@@ -6,13 +6,22 @@ const PR_APPROVER_BY_CODE = {
 };
 
 const prApprovalApprovedFilters = {
-  date: getPrTodayDate(),
+  dateFrom: getPrTodayDate(),
+  dateTo: getPrTodayDate(),
   prId: '',
 };
 
 const prManagerApprovedFilters = {
-  date: getPrTodayDate(),
+  dateFrom: getPrTodayDate(),
+  dateTo: getPrTodayDate(),
   prId: '',
+};
+
+const prOpenedPoFilters = {
+  dateFrom: getPrTodayDate(),
+  dateTo: getPrTodayDate(),
+  poId: '',
+  center: '',
 };
 
 const PR_CENTER_DISPLAY_NAME = {
@@ -88,10 +97,11 @@ function isPrPoManagerUser() {
 
 function setupPrPoWorkspaceForSpecialUsers() {
   if (isPrApprovalUser()) {
-    currentUser.permissions = ['pr_approval'];
+    currentUser.permissions = ['pr_approval', 'stock'];
     setPrModeLabel('pr_approval', 'อนุมัติ PR');
     renderPrNav([
       { tab: 'pr_approval', icon: '✅', label: 'อนุมัติ PR' },
+      { tab: 'stock', icon: '📦', label: 'Stock' },
     ]);
     renderPrApprovalPanels();
     bindPrWorkspaceTabs();
@@ -181,7 +191,12 @@ function bindPrWorkspaceTabs() {
   document.querySelectorAll('[data-pr-print-approved]').forEach((button) => {
     if (button.dataset.prBound === '1') return;
     button.dataset.prBound = '1';
-    button.addEventListener('click', () => printApprovedPrDocument(button.dataset.prPrintApproved || ''));
+    button.addEventListener('click', () => {
+      const reservedPrintWindow = typeof shouldOpenPrintInNewTab === 'function' && shouldOpenPrintInNewTab()
+        ? window.open('', '_blank')
+        : null;
+      printApprovedPrDocument(button.dataset.prPrintApproved || '', reservedPrintWindow);
+    });
   });
 }
 
@@ -242,6 +257,7 @@ function renderPrApprovalPanels() {
   `;
 
   bindPrApprovalApprovedFilters();
+  bindPrWorkspaceTabs();
 }
 
 async function fetchPrApprovalRecords() {
@@ -404,6 +420,7 @@ function normalizePrOpenedPoRecord(raw = {}) {
     status: raw.status || '',
     note: raw.note || '',
     pr_id: getPrIdFromPoRecord(raw),
+    received_items: normalizeItems(raw.received_items || raw.receivedItems),
     items: normalizeItems(raw.items).map((item) => ({
       ...item,
       product: item.product || item.name || '',
@@ -450,13 +467,16 @@ function renderPrApprovalSection(title, status, variant, records = []) {
 }
 
 function filterPrApprovalApprovedRecords(records = []) {
-  const dateFilter = String(prApprovalApprovedFilters.date || '').trim();
+  const dateFrom = String(prApprovalApprovedFilters.dateFrom || prApprovalApprovedFilters.date || '').trim();
+  const dateTo = String(prApprovalApprovedFilters.dateTo || prApprovalApprovedFilters.date || '').trim();
   const prIdFilter = String(prApprovalApprovedFilters.prId || '').trim().toLowerCase();
 
   return records.filter((record) => {
-    const matchesDate = !dateFilter || String(record.po_date || '') === dateFilter;
+    const recordDate = String(record.po_date || '').trim();
+    const matchesDateFrom = !dateFrom || (recordDate && recordDate >= dateFrom);
+    const matchesDateTo = !dateTo || (recordDate && recordDate <= dateTo);
     const matchesPrId = !prIdFilter || String(record.po_id || '').toLowerCase().includes(prIdFilter);
-    return matchesDate && matchesPrId;
+    return matchesDateFrom && matchesDateTo && matchesPrId;
   });
 }
 
@@ -464,11 +484,19 @@ function renderPrApprovalApprovedFilterBar() {
   return `
     <div class="pr-approved-filter-bar">
       <div class="field-group">
-        <label for="pr-approved-filter-date">วันที่ PR</label>
+        <label for="pr-approved-filter-date-from">จากวันที่</label>
         <input
-          id="pr-approved-filter-date"
+          id="pr-approved-filter-date-from"
           type="date"
-          value="${escapeHtml(prApprovalApprovedFilters.date || '')}"
+          value="${escapeHtml(prApprovalApprovedFilters.dateFrom || prApprovalApprovedFilters.date || '')}"
+        />
+      </div>
+      <div class="field-group">
+        <label for="pr-approved-filter-date-to">ถึงวันที่</label>
+        <input
+          id="pr-approved-filter-date-to"
+          type="date"
+          value="${escapeHtml(prApprovalApprovedFilters.dateTo || prApprovalApprovedFilters.date || '')}"
         />
       </div>
       <div class="field-group">
@@ -489,18 +517,20 @@ function renderPrApprovalApprovedFilterBar() {
 }
 
 function bindPrApprovalApprovedFilters() {
-  const dateInput = document.getElementById('pr-approved-filter-date');
+  const dateFromInput = document.getElementById('pr-approved-filter-date-from');
+  const dateToInput = document.getElementById('pr-approved-filter-date-to');
   const prIdInput = document.getElementById('pr-approved-filter-id');
   const button = document.getElementById('btn-pr-approved-filter');
 
   const applyFilters = () => {
-    prApprovalApprovedFilters.date = dateInput?.value || '';
+    prApprovalApprovedFilters.dateFrom = dateFromInput?.value || '';
+    prApprovalApprovedFilters.dateTo = dateToInput?.value || '';
     prApprovalApprovedFilters.prId = prIdInput?.value.trim() || '';
     renderPrApprovalPanels();
   };
 
   button?.addEventListener('click', applyFilters);
-  [dateInput, prIdInput].forEach((input) => {
+  [dateFromInput, dateToInput, prIdInput].forEach((input) => {
     input?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') applyFilters();
     });
@@ -562,10 +592,11 @@ function renderPrApproverButton(record, approver, label) {
 
   return `
     <button
-      class="${approved ? 'is-approved' : ''}"
+      class="approver-${escapeHtml(approver)} ${approved ? 'is-approved' : ''}"
       type="button"
       data-pr-approve="${escapeHtml(approver)}"
       data-pr-po-id="${escapeHtml(record.po_id)}"
+      title="${approved && canToggle ? 'กดเพื่อถอนอนุมัติ' : escapeHtml(label)}"
       ${canToggle ? '' : 'disabled'}
     >
       ${approved ? '✓ ' : ''}${escapeHtml(label)}
@@ -823,6 +854,7 @@ function renderApprovedPrPanel() {
   `;
 
   bindPrManagerApprovedFilters();
+  bindPrWorkspaceTabs();
 }
 
 function renderPrManagerStatusSection(title, status, variant, records = []) {
@@ -852,13 +884,16 @@ function renderPrManagerStatusSection(title, status, variant, records = []) {
 }
 
 function filterPrManagerApprovedRecords(records = []) {
-  const dateFilter = String(prManagerApprovedFilters.date || '').trim();
+  const dateFrom = String(prManagerApprovedFilters.dateFrom || prManagerApprovedFilters.date || '').trim();
+  const dateTo = String(prManagerApprovedFilters.dateTo || prManagerApprovedFilters.date || '').trim();
   const prIdFilter = String(prManagerApprovedFilters.prId || '').trim().toLowerCase();
 
   return records.filter((record) => {
-    const matchesDate = !dateFilter || String(record.po_date || '') === dateFilter;
+    const recordDate = String(record.po_date || '').trim();
+    const matchesDateFrom = !dateFrom || (recordDate && recordDate >= dateFrom);
+    const matchesDateTo = !dateTo || (recordDate && recordDate <= dateTo);
     const matchesPrId = !prIdFilter || String(record.po_id || '').toLowerCase().includes(prIdFilter);
-    return matchesDate && matchesPrId;
+    return matchesDateFrom && matchesDateTo && matchesPrId;
   });
 }
 
@@ -866,11 +901,19 @@ function renderPrManagerApprovedFilterBar() {
   return `
     <div class="pr-approved-filter-bar">
       <div class="field-group">
-        <label for="pr-manager-approved-filter-date">วันที่ PR</label>
+        <label for="pr-manager-approved-filter-date-from">จากวันที่</label>
         <input
-          id="pr-manager-approved-filter-date"
+          id="pr-manager-approved-filter-date-from"
           type="date"
-          value="${escapeHtml(prManagerApprovedFilters.date || '')}"
+          value="${escapeHtml(prManagerApprovedFilters.dateFrom || prManagerApprovedFilters.date || '')}"
+        />
+      </div>
+      <div class="field-group">
+        <label for="pr-manager-approved-filter-date-to">ถึงวันที่</label>
+        <input
+          id="pr-manager-approved-filter-date-to"
+          type="date"
+          value="${escapeHtml(prManagerApprovedFilters.dateTo || prManagerApprovedFilters.date || '')}"
         />
       </div>
       <div class="field-group">
@@ -891,18 +934,20 @@ function renderPrManagerApprovedFilterBar() {
 }
 
 function bindPrManagerApprovedFilters() {
-  const dateInput = document.getElementById('pr-manager-approved-filter-date');
+  const dateFromInput = document.getElementById('pr-manager-approved-filter-date-from');
+  const dateToInput = document.getElementById('pr-manager-approved-filter-date-to');
   const prIdInput = document.getElementById('pr-manager-approved-filter-id');
   const button = document.getElementById('btn-pr-manager-approved-filter');
 
   const applyFilters = () => {
-    prManagerApprovedFilters.date = dateInput?.value || '';
+    prManagerApprovedFilters.dateFrom = dateFromInput?.value || '';
+    prManagerApprovedFilters.dateTo = dateToInput?.value || '';
     prManagerApprovedFilters.prId = prIdInput?.value.trim() || '';
     renderApprovedPrPanel();
   };
 
   button?.addEventListener('click', applyFilters);
-  [dateInput, prIdInput].forEach((input) => {
+  [dateFromInput, dateToInput, prIdInput].forEach((input) => {
     input?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') applyFilters();
     });
@@ -958,7 +1003,7 @@ function renderApprovedPrStatusCard(record, variant = 'approved') {
   `;
 }
 
-function printApprovedPrDocument(poId) {
+function printApprovedPrDocument(poId, reservedPrintWindow = null) {
   const record = prApprovalRecords.find((item) => item.po_id === poId);
 
   if (!record) {
@@ -1136,16 +1181,9 @@ function printApprovedPrDocument(poId) {
     </html>
   `;
 
-  const printWindow = window.open('', '_blank');
-
-  if (!printWindow) {
-    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ PR', 'error');
-    return;
+  if (typeof openManagedPrintWindow === 'function') {
+    openManagedPrintWindow(html, 'ไม่สามารถพิมพ์ PR ได้', '', reservedPrintWindow);
   }
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
 }
 
 function renderOpenPoPanel() {
@@ -1270,7 +1308,8 @@ function getSelectedApprovedPrForPo(approvedRecords = prApprovalRecords.filter(i
 }
 
 function renderPrOpenedPoSection() {
-  const sortedPoRecords = [...prOpenedPoRecords]
+  const filteredPoRecords = filterPrOpenedPoRecords(prOpenedPoRecords);
+  const sortedPoRecords = [...filteredPoRecords]
     .sort((a, b) => new Date(b.created_at || b.updated_at || 0) - new Date(a.created_at || a.updated_at || 0));
   const totalItems = sortedPoRecords.reduce((sum, po) => sum + po.items.length, 0);
 
@@ -1284,6 +1323,8 @@ function renderPrOpenedPoSection() {
         <span class="pr-status-pill is-approved">เปิด PO แล้ว</span>
       </div>
 
+      ${renderPrOpenedPoFilterBar()}
+
       <div class="pr-card-list">
         ${sortedPoRecords.length
           ? sortedPoRecords.map(renderPrOpenedPoCard).join('')
@@ -1294,9 +1335,93 @@ function renderPrOpenedPoSection() {
   `;
 }
 
+function filterPrOpenedPoRecords(records = []) {
+  const dateFrom = String(prOpenedPoFilters.dateFrom || '').trim();
+  const dateTo = String(prOpenedPoFilters.dateTo || '').trim();
+  const keyword = String(prOpenedPoFilters.poId || '').trim().toLowerCase();
+  const center = String(prOpenedPoFilters.center || '').trim();
+
+  return records.filter((po) => {
+    const poDate = String(po.po_date || '').trim();
+    const poId = String(po.po_id || '').toLowerCase();
+    const prId = String(po.pr_id || '').toLowerCase();
+    const poCenter = String(po.center || '').trim();
+
+    const matchesDateFrom = !dateFrom || (poDate && poDate >= dateFrom);
+    const matchesDateTo = !dateTo || (poDate && poDate <= dateTo);
+    const matchesKeyword = !keyword || poId.includes(keyword) || prId.includes(keyword);
+    const matchesCenter = !center || poCenter === center;
+
+    return matchesDateFrom && matchesDateTo && matchesKeyword && matchesCenter;
+  });
+}
+
+function renderPrOpenedPoFilterBar() {
+  const centerOptions = getPrPoStockLocations().map((center) => `
+    <option value="${escapeHtml(center)}"${center === prOpenedPoFilters.center ? ' selected' : ''}>
+      ${escapeHtml(center)}
+    </option>
+  `).join('');
+
+  return `
+    <div class="pr-approved-filter-bar pr-opened-po-filter-bar">
+      <div class="field-group">
+        <label for="pr-opened-po-filter-date-from">จากวันที่</label>
+        <input type="date" id="pr-opened-po-filter-date-from" value="${escapeHtml(prOpenedPoFilters.dateFrom || '')}" />
+      </div>
+      <div class="field-group">
+        <label for="pr-opened-po-filter-date-to">ถึงวันที่</label>
+        <input type="date" id="pr-opened-po-filter-date-to" value="${escapeHtml(prOpenedPoFilters.dateTo || '')}" />
+      </div>
+      <div class="field-group">
+        <label for="pr-opened-po-filter-center">ศูนย์</label>
+        <select id="pr-opened-po-filter-center">
+          <option value="">ทุกศูนย์</option>
+          ${centerOptions}
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="pr-opened-po-filter-id">เลข PO / PR</label>
+        <input
+          type="text"
+          id="pr-opened-po-filter-id"
+          value="${escapeHtml(prOpenedPoFilters.poId || '')}"
+          placeholder="ค้นหาเลข PO หรือ PR"
+        />
+      </div>
+      <button class="btn-request-secondary pr-approved-filter-button" id="btn-pr-opened-po-filter" type="button">
+        เรียกดู
+      </button>
+    </div>
+  `;
+}
+
+function bindPrOpenedPoFilters(panel) {
+  const dateFromInput = panel.querySelector('#pr-opened-po-filter-date-from');
+  const dateToInput = panel.querySelector('#pr-opened-po-filter-date-to');
+  const centerSelect = panel.querySelector('#pr-opened-po-filter-center');
+  const idInput = panel.querySelector('#pr-opened-po-filter-id');
+  const button = panel.querySelector('#btn-pr-opened-po-filter');
+
+  const applyFilters = () => {
+    prOpenedPoFilters.dateFrom = dateFromInput?.value || '';
+    prOpenedPoFilters.dateTo = dateToInput?.value || '';
+    prOpenedPoFilters.center = centerSelect?.value || '';
+    prOpenedPoFilters.poId = idInput?.value || '';
+    renderOpenPoPanel();
+  };
+
+  button?.addEventListener('click', applyFilters);
+  centerSelect?.addEventListener('change', applyFilters);
+  idInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') applyFilters();
+  });
+}
+
 function renderPrOpenedPoCard(po) {
   const isEditing = prOpenedPoEditingId === po.po_id;
   const visibleItems = (po.items || []).filter((item) => !item._deleted);
+  const isFullyReceived = isPrOpenedPoFullyReceived(po);
   const editRows = getPrOpenedPoEditRows(po);
   const itemRows = isEditing
     ? editRows
@@ -1321,7 +1446,9 @@ function renderPrOpenedPoCard(po) {
         </div>
         <div class="pr-request-actions">
           <span class="pr-status-pill is-approved">เปิด PO แล้ว</span>
-          ${isEditing ? '' : `
+          ${isFullyReceived ? `
+            <span class="pr-status-pill is-approved">รับเข้าครบทุกรายการ</span>
+          ` : isEditing ? '' : `
             <button class="btn-po-edit" type="button" data-edit-opened-po="${escapeHtml(po.po_id || '')}">
               แก้ไข
             </button>
@@ -1371,9 +1498,57 @@ function renderPrOpenedPoCard(po) {
   `;
 }
 
+function isPrOpenedPoFullyReceived(po = {}) {
+  if (String(po.status || '').toLowerCase() === 'received') return true;
+
+  const items = (po.items || []).filter((item) => !item._deleted);
+  if (!items.length) return false;
+
+  const receivedItems = normalizeItems(po.received_items || po.receivedItems);
+  const receivedByLine = new Map();
+  const receivedByProduct = new Map();
+
+  receivedItems.forEach((received) => {
+    const qty = Number(received.qty || received.quantity || 0) || 0;
+    const lineIndexValue = received.line_index ?? received.lineIndex ?? received.po_line_index ?? received.poLineIndex;
+    const lineIndex = Number(lineIndexValue);
+    const product = String(received.product || received.name || '').trim();
+
+    if (Number.isInteger(lineIndex) && lineIndex >= 0) {
+      receivedByLine.set(lineIndex, (receivedByLine.get(lineIndex) || 0) + qty);
+      return;
+    }
+
+    if (product) {
+      receivedByProduct.set(product, (receivedByProduct.get(product) || 0) + qty);
+    }
+  });
+
+  return items.every((item, index) => {
+    const orderedQty = Number(item.qty || item.quantity || 0) || 0;
+    if (orderedQty <= 0) return true;
+
+    const product = String(item.product || item.name || '').trim();
+    const receivedQty = receivedByLine.has(index)
+      ? receivedByLine.get(index)
+      : (receivedByProduct.get(product) || 0);
+
+    return receivedQty >= orderedQty;
+  });
+}
+
 function getPrOpenedPoNumber(value) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function getPrPoCalculatedTotal(qty, unitPerBox, unitPrice) {
+  const qtyValue = Number(qty) || 0;
+  const unitPerBoxValue = Number(unitPerBox) || 0;
+  const unitPriceValue = Number(unitPrice) || 0;
+  return qtyValue > 0 && unitPerBoxValue > 0 && unitPriceValue > 0
+    ? qtyValue * unitPerBoxValue * unitPriceValue
+    : 0;
 }
 
 function getPrOpenedPoUnitPerBox(item) {
@@ -1424,9 +1599,8 @@ function getPrOpenedPoEditSourceItem(po, rowIndex) {
 function renderPrOpenedPoEditRow(po, item, index, isNew = false, visibleIndex = 0, totalRows = 1) {
   const qty = getPrOpenedPoNumber(item?.qty);
   const unitPerBox = getPrOpenedPoUnitPerBox(item);
-  const unitQty = qty * unitPerBox;
-  const total = getPrOpenedPoLineTotal(item);
-  const unitPrice = unitQty > 0 && total > 0 ? total / unitQty : 0;
+  const unitPrice = getPrOpenedPoNumber(item?.unit_price ?? item?.unitPrice);
+  const total = getPrPoCalculatedTotal(qty, unitPerBox, unitPrice);
   const unit = getPrOpenPoItemUnit(item, { center: po.center, items: po.items });
   const selectedProduct = item.product || '';
   const productCell = isNew
@@ -1456,9 +1630,11 @@ function renderPrOpenedPoEditRow(po, item, index, isNew = false, visibleIndex = 
       <label class="pr-po-mobile-field" data-label="ต่อกล่อง">
         <input type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(unitPerBox || '')}" data-opened-po-edit-unit-per-box />
       </label>
-      <span class="pr-unit-price pr-po-mobile-field" data-label="ราคาต่อหน่วย">${unitPrice ? formatPrCurrency(unitPrice) : '0.00'}</span>
+      <label class="pr-po-mobile-field" data-label="ราคาต่อหน่วย">
+        <input type="number" min="0" step="0.01" inputmode="decimal" value="${escapeHtml(unitPrice || '')}" data-opened-po-edit-unit-price />
+      </label>
       <label class="pr-po-mobile-field" data-label="ราคารวม">
-        <input type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(total || '')}" data-opened-po-edit-total />
+        <span class="pr-unit-price" data-opened-po-edit-total>${total ? formatPrCurrency(total) : '0.00'}</span>
       </label>
       <button class="btn-remove-row" type="button" data-remove-opened-po-edit-row="${index}" data-opened-po-edit-po-id="${escapeHtml(po.po_id || '')}" aria-label="ลบรายการ">×</button>
     </div>
@@ -1470,13 +1646,13 @@ function refreshPrOpenedPoEditRowTotal(rowEl) {
 
   const qty = getPrOpenedPoNumber(rowEl.querySelector('[data-opened-po-edit-qty]')?.value);
   const unitPerBox = getPrOpenedPoNumber(rowEl.querySelector('[data-opened-po-edit-unit-per-box]')?.value);
-  const total = getPrOpenedPoNumber(rowEl.querySelector('[data-opened-po-edit-total]')?.value);
-  const unitQty = qty * unitPerBox;
-  const unitPrice = unitQty > 0 && total > 0 ? total / unitQty : 0;
-  const unitPriceEl = rowEl.querySelector('.pr-unit-price');
+  const unitPrice = getPrOpenedPoNumber(rowEl.querySelector('[data-opened-po-edit-unit-price]')?.value);
+  const total = getPrPoCalculatedTotal(qty, unitPerBox, unitPrice);
+  const totalEl = rowEl.querySelector('[data-opened-po-edit-total]');
 
-  if (unitPriceEl) {
-    unitPriceEl.textContent = unitPrice ? formatPrCurrency(unitPrice) : '0.00';
+  if (totalEl) {
+    totalEl.textContent = total ? formatPrCurrency(total) : '0.00';
+    totalEl.dataset.openedPoEditTotal = String(total);
   }
 }
 
@@ -1617,9 +1793,9 @@ function getPrOpenedPoEditedItems(po, card) {
     ).trim();
     const qty = getPrOpenedPoNumber(rowEl?.querySelector('[data-opened-po-edit-qty]')?.value);
     const unitPerBox = getPrOpenedPoNumber(rowEl?.querySelector('[data-opened-po-edit-unit-per-box]')?.value);
-    const totalPrice = getPrOpenedPoNumber(rowEl?.querySelector('[data-opened-po-edit-total]')?.value);
     const unitQty = unitPerBox > 0 ? qty * unitPerBox : null;
-    const unitPrice = unitQty > 0 && totalPrice > 0 ? totalPrice / unitQty : null;
+    const unitPrice = getPrOpenedPoNumber(rowEl?.querySelector('[data-opened-po-edit-unit-price]')?.value) || null;
+    const totalPrice = unitPrice ? getPrPoCalculatedTotal(qty, unitPerBox, unitPrice) : 0;
     const unit = item.unit || getPrOpenPoBestStockUnit(product, po.center);
 
     return {
@@ -1795,6 +1971,8 @@ async function refreshNextPoDocumentIdInput(excludedIds = []) {
 }
 
 function bindPrOpenPoPanel(panel) {
+  bindPrOpenedPoFilters(panel);
+
   panel.querySelector('[data-pr-open-po-ref]')?.addEventListener('change', (event) => {
     prOpenPoSelectedPrId = event.target.value;
     prOpenPoRows = [];
@@ -1918,13 +2096,13 @@ function addPrOpenPoRow() {
     if (!row) return;
     const qtyEl = rowEl.querySelector('[data-pr-po-qty]');
     const unitPerBoxEl = rowEl.querySelector('[data-pr-po-unit-per-box]');
-    const totalEl = rowEl.querySelector('[data-pr-po-line-total]');
+    const unitPriceEl = rowEl.querySelector('[data-pr-po-unit-price]');
     if (qtyEl) row.qty = qtyEl.value;
     if (unitPerBoxEl) {
       row.unitPerBox = unitPerBoxEl.value;
       row.unitQty = (Number(row.qty) || 0) * (Number(row.unitPerBox) || 0);
     }
-    if (totalEl) row.total = totalEl.value;
+    if (unitPriceEl) row.unitPrice = unitPriceEl.value;
   });
 
   prOpenPoRows.push({
@@ -1935,6 +2113,7 @@ function addPrOpenPoRow() {
     qty: '',
     unitPerBox: '',
     unitQty: '',
+    unitPrice: '',
     total: '',
   });
   renderOpenPoPanel();
@@ -1964,6 +2143,7 @@ function handlePrOpenPoRowChange(event) {
 
   if (event.target.matches('[data-pr-po-qty]')) {
     row.qty = event.target.value;
+    row.unitQty = (Number(row.qty) || 0) * (Number(row.unitPerBox) || 0);
   }
 
   if (event.target.matches('[data-pr-po-unit-qty]')) {
@@ -1980,9 +2160,11 @@ function handlePrOpenPoRowChange(event) {
     row.unitQty = (Number(row.qty) || 0) * (Number(row.unitPerBox) || 0);
   }
 
-  if (event.target.matches('[data-pr-po-line-total]')) {
-    row.total = event.target.value;
+  if (event.target.matches('[data-pr-po-unit-price]')) {
+    row.unitPrice = event.target.value;
   }
+
+  row.total = getPrPoCalculatedTotal(row.qty, row.unitPerBox, row.unitPrice);
 
   refreshPrOpenPoTotals();
 }
@@ -2098,7 +2280,8 @@ function renderPrOpenPoRow(row, record) {
   const sourceItem = getPrOpenPoSourceItem(record, row);
   const selectedProduct = row.product || sourceItem?.product || '';
   const unitQty = (Number(row.qty) || 0) * (Number(row.unitPerBox) || 0);
-  const unitPrice = unitQty > 0 ? (Number(row.total) || 0) / unitQty : 0;
+  const unitPrice = Number(row.unitPrice ?? row.unit_price ?? sourceItem?.unit_price ?? sourceItem?.unitPrice ?? 0) || 0;
+  const lineTotal = getPrPoCalculatedTotal(row.qty, row.unitPerBox, unitPrice);
   const selectedItem = sourceItem || (selectedProduct ? { product: selectedProduct, unit: row.unit } : null);
   const unit = getPrOpenPoItemUnit(selectedItem, record);
 
@@ -2119,9 +2302,11 @@ function renderPrOpenPoRow(row, record) {
       <label class="pr-po-mobile-field" data-label="ต่อกล่อง">
         <input type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(row.unitPerBox || '')}" data-pr-po-unit-per-box />
       </label>
-      <span class="pr-unit-price pr-po-mobile-field" data-label="ราคาต่อหน่วย">${unitPrice ? formatPrCurrency(unitPrice) : '0.00'}</span>
+      <label class="pr-po-mobile-field" data-label="ราคาต่อหน่วย">
+        <input type="number" min="0" step="0.01" inputmode="decimal" value="${escapeHtml(unitPrice || '')}" data-pr-po-unit-price />
+      </label>
       <label class="pr-po-mobile-field" data-label="ราคารวม">
-        <input type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(row.total)}" data-pr-po-line-total />
+        <span class="pr-unit-price" data-pr-po-line-total>${lineTotal ? formatPrCurrency(lineTotal) : '0.00'}</span>
       </label>
       <button class="btn-remove-row" type="button" data-remove-pr-po-row="${escapeHtml(row.id)}" aria-label="ลบรายการ">×</button>
     </div>
@@ -2170,10 +2355,15 @@ function refreshPrOpenPoUnitsForCenter(center) {
 function refreshPrOpenPoTotals() {
   document.querySelectorAll('[data-pr-po-row]').forEach((rowEl) => {
     const row = prOpenPoRows.find((item) => item.id === rowEl.dataset.prPoRow);
-    const unitPrice = getPrOpenPoUnitPrice(row);
-    const unitPriceEl = rowEl.querySelector('.pr-unit-price');
-    if (unitPriceEl) {
-      unitPriceEl.textContent = unitPrice ? formatPrCurrency(unitPrice) : '0.00';
+    if (!row) return;
+
+    row.unitQty = (Number(row.qty) || 0) * (Number(row.unitPerBox) || 0);
+    row.total = getPrPoCalculatedTotal(row.qty, row.unitPerBox, row.unitPrice);
+
+    const totalEl = rowEl.querySelector('[data-pr-po-line-total]');
+    if (totalEl) {
+      totalEl.textContent = row.total ? formatPrCurrency(row.total) : '0.00';
+      totalEl.dataset.prPoLineTotal = String(row.total || 0);
     }
   });
 
@@ -2189,13 +2379,13 @@ function refreshPrOpenPoTotals() {
 }
 
 function getPrOpenPoUnitPrice(row) {
-  const qty = Number(row?.unitQty || 0);
-  const total = Number(row?.total || 0);
-  return qty > 0 && total > 0 ? total / qty : 0;
+  return Number(row?.unitPrice ?? row?.unit_price ?? 0) || 0;
 }
 
 function getPrOpenPoTotal() {
-  return prOpenPoRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
+  return prOpenPoRows.reduce((sum, row) => (
+    sum + getPrPoCalculatedTotal(row.qty, row.unitPerBox, row.unitPrice)
+  ), 0);
 }
 
 function getValidPrOpenPoRows() {
@@ -2250,8 +2440,8 @@ async function savePrOpenPoDraft() {
     const qty = Number(row.qty) || 0;
     const unitPerBox = Number(row.unitPerBox) > 0 ? Number(row.unitPerBox) : null;
     const unitQty = unitPerBox === null ? null : qty * unitPerBox;
-    const totalPrice = Number(row.total) || 0;
-    const unitPrice = unitQty > 0 ? totalPrice / unitQty : null;
+    const unitPrice = Number(row.unitPrice) > 0 ? Number(row.unitPrice) : null;
+    const totalPrice = unitPrice ? getPrPoCalculatedTotal(qty, unitPerBox, unitPrice) : 0;
     const unit = row.unit || getPrOpenPoItemUnit(sourceItem.product ? sourceItem : { product }, record);
 
     return {

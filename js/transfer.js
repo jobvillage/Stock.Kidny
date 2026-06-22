@@ -2388,14 +2388,18 @@ function escapeSupabaseLike(value) {
 }
 
 function getTransferHistorySource(tx = {}) {
+  const action = cleanTransferHistoryAction(tx.action);
   if (tx.source_center) return tx.source_center;
-  if (tx.action === 'TRANSFER_ACCEPT') return tx.target_center || '';
+  if (action === 'STOCK_IN') return tx.target_center || '';
+  if (action === 'TRANSFER_ACCEPT') return tx.target_center || '';
   return tx.center || '';
 }
 
 function getTransferHistoryDestination(tx = {}) {
+  const action = cleanTransferHistoryAction(tx.action);
   if (tx.destination_center) return tx.destination_center;
-  if (tx.action === 'TRANSFER_ACCEPT') return tx.center || '';
+  if (action === 'STOCK_IN') return tx.center || tx.target_center || '';
+  if (action === 'TRANSFER_ACCEPT') return tx.center || '';
   return tx.target_center || '';
 }
 
@@ -2412,6 +2416,7 @@ function getTransferHistoryUnit(tx = {}) {
 
 function getTransferHistoryActionLabel(action = '') {
   const normalized = cleanTransferHistoryAction(action);
+  if (normalized === 'STOCK_IN') return 'รับเข้า';
   if (normalized === 'STOCK_OUT') return 'เบิก/ตัดสต็อก';
   if (normalized === 'TRANSFER_OUT') return 'โอนย้าย';
   if (normalized === 'TRANSFER_ACCEPT') return 'รับโอน';
@@ -2420,6 +2425,7 @@ function getTransferHistoryActionLabel(action = '') {
 
 function getTransferHistoryActionClass(action = '') {
   const normalized = cleanTransferHistoryAction(action);
+  if (normalized === 'STOCK_IN') return 'is-stock-in';
   if (normalized === 'STOCK_OUT') return 'is-stock-out';
   if (normalized === 'TRANSFER_OUT') return 'is-transfer';
   return '';
@@ -2525,7 +2531,7 @@ async function fetchTransactionHistoryForPanel(config = {}) {
   box.innerHTML = '<div class="empty-state">กำลังโหลดรายการ Transaction ย้อนหลัง...</div>';
 
   try {
-    const allowedActions = new Set(['STOCK_OUT', 'TRANSFER_OUT']);
+    const allowedActions = new Set(['STOCK_IN', 'STOCK_OUT', 'TRANSFER_OUT']);
     const buildQuery = (columns) => {
       let nextQuery = supabaseClient
         .from('transactions')
@@ -3180,12 +3186,19 @@ function renderPoStatus(poList) {
       const unit = getPoItemUnit(item, poCenter);
       const receivedQty = Number(receivedState.receivedQty) || 0;
       const remainingQty = Number(receivedState.remainingQty ?? Math.max(0, orderedQty - receivedQty)) || 0;
+      const isCancelledLine = orderedQty <= 0;
       const isFullyReceived = orderedQty > 0 && receivedQty >= orderedQty;
       const isPartiallyReceived = receivedQty > 0 && remainingQty > 0;
 
       let receivedLabel = '';
 
-      if (isFullyReceived) {
+      if (isCancelledLine) {
+        receivedLabel = `
+          <small class="po-received-label is-cancelled">
+            ยกเลิกรายการ
+          </small>
+        `;
+      } else if (isFullyReceived) {
         receivedLabel = `
           <small class="po-received-label is-complete">
             รับเข้าแล้วครบ ${receivedQty}/${orderedQty}
@@ -3780,16 +3793,9 @@ function printPoDocument(poId) {
     </html>
   `;
 
-  const printWindow = window.open('', '_blank');
-
-  if (!printWindow) {
-    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ PR', 'error');
-    return;
+  if (typeof openManagedPrintWindow === 'function') {
+    openManagedPrintWindow(html, 'ไม่สามารถพิมพ์ PR ได้');
   }
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
 }
 
 function printPickList(requestId) {
@@ -3952,15 +3958,9 @@ function printPickList(requestId) {
     </html>
   `;
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ใบจัดของ', 'error');
-    return;
+  if (typeof openManagedPrintWindow === 'function') {
+    openManagedPrintWindow(html, 'ไม่สามารถพิมพ์ใบจัดของได้');
   }
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
 }
 
 function printCompletedRequestPickList(requestId) {
@@ -4062,15 +4062,9 @@ function printCompletedRequestPickList(requestId) {
     </html>
   `;
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ใบเบิก', 'error');
-    return;
+  if (typeof openManagedPrintWindow === 'function') {
+    openManagedPrintWindow(html, 'ไม่สามารถพิมพ์ใบเบิกได้');
   }
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
 }
 
 function printStaffPendingRequest(requestId) {
@@ -4170,15 +4164,9 @@ function printStaffPendingRequest(requestId) {
     </html>
   `;
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    showToast('⚠️ กรุณาอนุญาต Pop-up เพื่อพิมพ์ใบขอเบิก', 'error');
-    return;
+  if (typeof openManagedPrintWindow === 'function') {
+    openManagedPrintWindow(html, 'ไม่สามารถพิมพ์ใบขอเบิกได้');
   }
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
 }
 
 function getPoRemainingItems(po) {
@@ -4453,6 +4441,55 @@ async function savePartialPoQuantityEdits(poId, button) {
   }
 }
 
+async function cancelPoRemainingLine(poId, input, button) {
+  const product = input?.dataset.product || '';
+  const lineIndex = Number(input?.dataset.lineIndex ?? -1);
+  const receivedQty = Number(input?.dataset.receivedQty || 0);
+
+  if (!product || !Number.isInteger(lineIndex) || lineIndex < 0) {
+    showToast('⚠️ ไม่พบรายการ PO ที่ต้องการยกเลิก', 'error');
+    return false;
+  }
+
+  const ok = confirm(`ยืนยันยกเลิกรายการค้างรับ "${product}" ใช่ไหม? รายการนี้จะไม่รับเข้าสต็อก`);
+  if (!ok) return false;
+
+  if (button) button.disabled = true;
+  showToast('', 'loading', 'กำลังยกเลิกรายการค้างรับ...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('update_po_line_quantities', {
+      p_po_id: poId,
+      p_staff_code: currentUser?.code || '',
+      p_staff_name: currentUser?.name || currentUser?.code || '',
+      p_items: [{
+        product,
+        qty: receivedQty,
+        remainingQty: 0,
+        lineIndex,
+        line_index: lineIndex,
+      }],
+    });
+
+    if (error) throw error;
+
+    if (!data || data.success !== true || Number(data.matched_count ?? data.matchedCount ?? 0) <= 0) {
+      throw new Error(data?.message || 'ยกเลิกรายการค้างรับไม่สำเร็จ');
+    }
+
+    showToast('✅ ยกเลิกรายการค้างรับเรียบร้อย', 'success');
+    await fetchPoStatus();
+    fetchPendingPoSummary?.();
+    return true;
+
+  } catch (error) {
+    console.error('cancelPoRemainingLine error:', error);
+    showToast(`❌ ${error.message || 'ยกเลิกรายการค้างรับไม่สำเร็จ'}`, 'error');
+    if (button) button.disabled = false;
+    return false;
+  }
+}
+
 async function receivePoItems(poId, items, options = {}) {
   const shouldRefreshPoStatus = options.refreshPoStatus !== false;
   const po = window.currentPoStatusList?.find((item) => item.po_id === poId) || {};
@@ -4669,6 +4706,11 @@ async function saveSinglePartialReceivePo(poId, button) {
   const remainingQty = Number(input.dataset.remainingQty || 0);
   const lineIndex = Number(input.dataset.lineIndex ?? -1);
   let qty = Number(input.value) || 0;
+
+  if (qty <= 0) {
+    await cancelPoRemainingLine(poId, input, button);
+    return;
+  }
 
   if (!product) {
     showToast('⚠️ ไม่พบชื่อสินค้า', 'error');
