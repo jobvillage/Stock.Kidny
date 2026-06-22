@@ -78,10 +78,16 @@ let prOpenPoDocumentId = '';
 let prOpenedPoEditingId = '';
 let prOpenedPoEditExtraRows = {};
 let prVendorProductCompanyMap = new Map();
+let prVendorProductCostMap = new Map();
 let prVendorProductCompanyLoaded = false;
 let prProductTypeMap = new Map();
 let prProductTypeLoaded = false;
 let addDataVendorMetaMap = new Map();
+let prFilterDelegatesBound = false;
+let prLastFilterActivation = {
+  id: '',
+  time: 0,
+};
 
 function getPrUserCode() {
   return String(currentUser?.code || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
@@ -151,6 +157,8 @@ function renderPrNav(tabs) {
 }
 
 function bindPrWorkspaceTabs() {
+  bindPrFilterDelegates();
+
   document.querySelectorAll('.segmented-control [data-tab]').forEach((button) => {
     if (button.dataset.prBound === '1') return;
     button.dataset.prBound = '1';
@@ -198,6 +206,51 @@ function bindPrWorkspaceTabs() {
       printApprovedPrDocument(button.dataset.prPrintApproved || '', reservedPrintWindow);
     });
   });
+
+  document.querySelectorAll('[data-print-opened-po]').forEach((button) => {
+    if (button.dataset.prBound === '1') return;
+    button.dataset.prBound = '1';
+    button.addEventListener('click', () => {
+      const reservedPrintWindow = typeof shouldOpenPrintInNewTab === 'function' && shouldOpenPrintInNewTab()
+        ? window.open('', '_blank')
+        : null;
+      printOpenedPoDocument(button.dataset.printOpenedPo || '', reservedPrintWindow);
+    });
+  });
+}
+
+function bindPrFilterDelegates() {
+  if (prFilterDelegatesBound) return;
+  prFilterDelegatesBound = true;
+
+  const handleFilterActivation = (event) => {
+    const button = event.target?.closest?.(
+      '#btn-pr-approved-filter, #btn-pr-manager-approved-filter, #btn-pr-opened-po-filter'
+    );
+    if (!button) return;
+
+    if (event.type === 'pointerup' && event.pointerType === 'mouse') return;
+
+    const now = Date.now();
+    if (prLastFilterActivation.id === button.id && now - prLastFilterActivation.time < 450) {
+      return;
+    }
+    prLastFilterActivation = { id: button.id, time: now };
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (button.id === 'btn-pr-approved-filter') {
+      applyPrApprovalApprovedFilters();
+    } else if (button.id === 'btn-pr-manager-approved-filter') {
+      applyPrManagerApprovedFilters();
+    } else if (button.id === 'btn-pr-opened-po-filter') {
+      applyPrOpenedPoFilters();
+    }
+  };
+
+  document.addEventListener('click', handleFilterActivation, true);
+  document.addEventListener('pointerup', handleFilterActivation, true);
 }
 
 function openPrApprovalPreviewModal(company, record, variant) {
@@ -364,6 +417,10 @@ function normalizePrApprovalRecord(raw) {
       unitPrice: item.unitPrice ?? item.unit_price ?? null,
       total_price: item.total_price ?? item.totalPrice ?? item.line_total ?? item.lineTotal ?? null,
       totalPrice: item.totalPrice ?? item.total_price ?? item.line_total ?? item.lineTotal ?? null,
+      po_open_qty: item.po_open_qty ?? item.poOpenQty ?? item.ordered_qty ?? item.orderedQty ?? null,
+      poOpenQty: item.poOpenQty ?? item.po_open_qty ?? item.ordered_qty ?? item.orderedQty ?? null,
+      ordered_qty: item.ordered_qty ?? item.orderedQty ?? item.po_open_qty ?? item.poOpenQty ?? null,
+      orderedQty: item.orderedQty ?? item.ordered_qty ?? item.po_open_qty ?? item.poOpenQty ?? null,
     })).filter((item) => item.product),
     created_at: raw.created_at || '',
     updated_at: raw.updated_at || '',
@@ -438,6 +495,81 @@ function normalizePrOpenedPoRecord(raw = {}) {
     created_at: raw.created_at || '',
     updated_at: raw.updated_at || '',
   };
+}
+
+function getPrLineKey(item = {}, index = -1) {
+  const explicitIndex = item.pr_line_index ?? item.prLineIndex;
+  if (explicitIndex !== null && explicitIndex !== undefined && explicitIndex !== '') {
+    return `idx:${explicitIndex}`;
+  }
+
+  if (index >= 0) return `idx:${index}`;
+
+  return `product:${getPrOpenPoProductKey(item.product || item.name || '')}`;
+}
+
+function getOpenedPoQtyByPrLine(record) {
+  const openedQtyMap = new Map();
+  const targetPrId = String(record?.po_id || '').trim();
+  if (!targetPrId) return openedQtyMap;
+
+  prOpenedPoRecords
+    .filter((po) => String(po.pr_id || '').trim() === targetPrId)
+    .forEach((po) => {
+      (po.items || []).forEach((item) => {
+        const explicitIndex = item.pr_line_index ?? item.prLineIndex;
+        const requestedItem = explicitIndex !== null && explicitIndex !== undefined && explicitIndex !== ''
+          ? record.items?.[Number(explicitIndex)]
+          : null;
+        const requestedQty = Number(requestedItem?.qty || requestedItem?.quantity || 0) || 0;
+        const stampedOpenQty = item.po_open_qty ?? item.poOpenQty ?? item.ordered_qty ?? item.orderedQty;
+        const hasStampedOpenQty = stampedOpenQty !== null && stampedOpenQty !== undefined && stampedOpenQty !== '';
+        const qty = hasStampedOpenQty
+          ? Number(stampedOpenQty || 0) || 0
+          : requestedQty || Number(item.qty || item.quantity || 0) || 0;
+
+        if (qty <= 0) return;
+
+        const key = getPrLineKey(item, explicitIndex !== null && explicitIndex !== undefined && explicitIndex !== '' ? Number(explicitIndex) : -1);
+        if (!key || key === 'product:') return;
+
+        openedQtyMap.set(key, (openedQtyMap.get(key) || 0) + qty);
+      });
+    });
+
+  return openedQtyMap;
+}
+
+function getPrRemainingItemsForPo(record) {
+  if (!record) return [];
+
+  const openedQtyMap = getOpenedPoQtyByPrLine(record);
+  const remainingItems = [];
+
+  (record.items || []).forEach((item, index) => {
+    const requestedQty = Number(item.qty || item.quantity || 0) || 0;
+    const indexKey = getPrLineKey(item, index);
+    const productKey = `product:${getPrOpenPoProductKey(item.product || item.name || '')}`;
+    const openedQty = (openedQtyMap.get(indexKey) || 0) + (openedQtyMap.get(productKey) || 0);
+    const remainingQty = Math.max(0, requestedQty - openedQty);
+
+    if (remainingQty > 0) {
+      remainingItems.push({
+        ...item,
+        qty: remainingQty,
+        remainingQty,
+        requestedQty,
+        openedQty,
+        originalIndex: index,
+      });
+    }
+  });
+
+  return remainingItems;
+}
+
+function isPrFullyOpenedAsPo(record) {
+  return getPrRemainingItemsForPo(record).length === 0;
 }
 
 function renderPrApprovalSection(title, status, variant, records = []) {
@@ -517,24 +649,28 @@ function renderPrApprovalApprovedFilterBar() {
 }
 
 function bindPrApprovalApprovedFilters() {
+  const button = document.getElementById('btn-pr-approved-filter');
   const dateFromInput = document.getElementById('pr-approved-filter-date-from');
   const dateToInput = document.getElementById('pr-approved-filter-date-to');
   const prIdInput = document.getElementById('pr-approved-filter-id');
-  const button = document.getElementById('btn-pr-approved-filter');
 
-  const applyFilters = () => {
-    prApprovalApprovedFilters.dateFrom = dateFromInput?.value || '';
-    prApprovalApprovedFilters.dateTo = dateToInput?.value || '';
-    prApprovalApprovedFilters.prId = prIdInput?.value.trim() || '';
-    renderPrApprovalPanels();
-  };
-
-  button?.addEventListener('click', applyFilters);
+  button?.addEventListener('click', applyPrApprovalApprovedFilters);
   [dateFromInput, dateToInput, prIdInput].forEach((input) => {
     input?.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') applyFilters();
+      if (event.key === 'Enter') applyPrApprovalApprovedFilters();
     });
   });
+}
+
+function applyPrApprovalApprovedFilters() {
+  const dateFromInput = document.getElementById('pr-approved-filter-date-from');
+  const dateToInput = document.getElementById('pr-approved-filter-date-to');
+  const prIdInput = document.getElementById('pr-approved-filter-id');
+
+  prApprovalApprovedFilters.dateFrom = dateFromInput?.value || '';
+  prApprovalApprovedFilters.dateTo = dateToInput?.value || '';
+  prApprovalApprovedFilters.prId = prIdInput?.value.trim() || '';
+  renderPrApprovalPanels();
 }
 
 function renderPrApprovalPoCard(record, variant) {
@@ -688,13 +824,57 @@ function isPrDialysisProductType(productType) {
   return Boolean(normalizedType && dialysisType && normalizedType.includes(dialysisType));
 }
 
+function getPrVendorCostMetaForProduct(product) {
+  const productKey = normalizePrProductName(product);
+  return productKey ? prVendorProductCostMap.get(productKey) || null : null;
+}
+
+function getPrVendorCostUnitPrice(meta = {}) {
+  const unitPrice = Number(meta.costUnitPrice || 0);
+  if (unitPrice > 0) return unitPrice;
+
+  const costQty = Number(meta.costQty || 0);
+  const costUnitQty = Number(meta.costUnitQty || 0);
+  const totalPrice = Number(meta.costTotalPrice || 0);
+  const totalUnits = costQty * costUnitQty;
+  return totalUnits > 0 && totalPrice > 0 ? totalPrice / totalUnits : 0;
+}
+
+function applyPrVendorCostDefaultsToRow(row, product, options = {}) {
+  if (!row || !product) return row;
+
+  const meta = getPrVendorCostMetaForProduct(product);
+  if (!meta) return row;
+
+  const preserveQty = options.preserveQty === true;
+  const costQty = Number(meta.costQty || 0);
+  const costUnitQty = Number(meta.costUnitQty || 0);
+  const unitPrice = getPrVendorCostUnitPrice(meta);
+
+  if (!preserveQty && !Number(row.qty || 0) && costQty > 0) {
+    row.qty = String(costQty);
+  }
+
+  if (!Number(row.unitPerBox || 0) && costUnitQty > 0) {
+    row.unitPerBox = String(costUnitQty);
+    row.unitQty = (Number(row.qty) || 0) * costUnitQty;
+  }
+
+  if (!Number(row.unitPrice || 0) && unitPrice > 0) {
+    row.unitPrice = String(Number(unitPrice.toFixed(2)));
+  }
+
+  row.total = getPrPoCalculatedTotal(row.qty, row.unitPerBox, row.unitPrice);
+  return row;
+}
+
 async function fetchPrVendorProductCompanyMap() {
   if (prVendorProductCompanyLoaded || typeof supabaseClient === 'undefined') return prVendorProductCompanyMap;
 
   try {
     const { data, error } = await supabaseClient
       .from('vendor_products')
-      .select('product, updated_at, vendors(vendor_name)')
+      .select('product, unit, cost_qty, cost_unit_qty, cost_unit_price, cost_total_price, cost_unit, updated_at, vendors(vendor_name)')
       .eq('is_active', true)
       .order('updated_at', { ascending: false });
 
@@ -703,15 +883,27 @@ async function fetchPrVendorProductCompanyMap() {
     }
 
     const nextMap = new Map();
+    const nextCostMap = new Map();
 
     (data || []).forEach((row) => {
       const productKey = normalizePrProductName(row.product);
-      if (!productKey || nextMap.has(productKey)) return;
+      if (!productKey) return;
 
       const vendor = Array.isArray(row.vendors) ? row.vendors[0] : row.vendors;
       const vendorName = String(vendor?.vendor_name || '').trim();
-      if (vendorName) {
+      if (vendorName && !nextMap.has(productKey)) {
         nextMap.set(productKey, vendorName);
+      }
+
+      if (!nextCostMap.has(productKey)) {
+        nextCostMap.set(productKey, {
+          unit: row.unit || row.cost_unit || '',
+          costQty: row.cost_qty ?? '',
+          costUnitQty: row.cost_unit_qty ?? '',
+          costUnitPrice: row.cost_unit_price ?? '',
+          costTotalPrice: row.cost_total_price ?? '',
+          costUnit: row.cost_unit || '',
+        });
       }
     });
 
@@ -720,6 +912,7 @@ async function fetchPrVendorProductCompanyMap() {
     console.log('=== prVendorProductCompanyMap ===', [...nextMap.entries()]);
 
     prVendorProductCompanyMap = nextMap;
+    prVendorProductCostMap = nextCostMap;
     prVendorProductCompanyLoaded = true;
 
   } catch (error) {
@@ -934,24 +1127,28 @@ function renderPrManagerApprovedFilterBar() {
 }
 
 function bindPrManagerApprovedFilters() {
+  const button = document.getElementById('btn-pr-manager-approved-filter');
   const dateFromInput = document.getElementById('pr-manager-approved-filter-date-from');
   const dateToInput = document.getElementById('pr-manager-approved-filter-date-to');
   const prIdInput = document.getElementById('pr-manager-approved-filter-id');
-  const button = document.getElementById('btn-pr-manager-approved-filter');
 
-  const applyFilters = () => {
-    prManagerApprovedFilters.dateFrom = dateFromInput?.value || '';
-    prManagerApprovedFilters.dateTo = dateToInput?.value || '';
-    prManagerApprovedFilters.prId = prIdInput?.value.trim() || '';
-    renderApprovedPrPanel();
-  };
-
-  button?.addEventListener('click', applyFilters);
+  button?.addEventListener('click', applyPrManagerApprovedFilters);
   [dateFromInput, dateToInput, prIdInput].forEach((input) => {
     input?.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') applyFilters();
+      if (event.key === 'Enter') applyPrManagerApprovedFilters();
     });
   });
+}
+
+function applyPrManagerApprovedFilters() {
+  const dateFromInput = document.getElementById('pr-manager-approved-filter-date-from');
+  const dateToInput = document.getElementById('pr-manager-approved-filter-date-to');
+  const prIdInput = document.getElementById('pr-manager-approved-filter-id');
+
+  prManagerApprovedFilters.dateFrom = dateFromInput?.value || '';
+  prManagerApprovedFilters.dateTo = dateToInput?.value || '';
+  prManagerApprovedFilters.prId = prIdInput?.value.trim() || '';
+  renderApprovedPrPanel();
 }
 
 function renderApprovedPrStatusCard(record, variant = 'approved') {
@@ -1186,10 +1383,274 @@ function printApprovedPrDocument(poId, reservedPrintWindow = null) {
   }
 }
 
+function formatPrPoPrintDate(dateText) {
+  if (!dateText) return '-';
+  const date = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateText;
+  return date.toLocaleDateString('th-TH', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatPrPoPrintMoney(value) {
+  return Number(value || 0).toLocaleString('th-TH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function getPrPoPrintUnitPrice(item = {}) {
+  const unitPrice = Number(item.unit_price ?? item.unitPrice ?? 0) || 0;
+  if (unitPrice > 0) return unitPrice;
+
+  const total = Number(item.total_price ?? item.totalPrice ?? 0) || 0;
+  const unitQty = Number(item.unit_qty ?? item.unitQty ?? 0) || 0;
+  return total > 0 && unitQty > 0 ? total / unitQty : 0;
+}
+
+function getPrPoPrintLineTotal(item = {}) {
+  const total = Number(item.total_price ?? item.totalPrice ?? 0) || 0;
+  if (total > 0) return total;
+  return getPrPoCalculatedTotal(item.qty, item.unit_per_box ?? item.unitPerBox, getPrPoPrintUnitPrice(item));
+}
+
+function getPrPoPrintCompanyInfo(center = '') {
+  const companyName = getPrCenterDisplayName(center || '') || 'บริษัท ไตดีลำพูน จำกัด';
+  return {
+    name: companyName,
+    address: '99/19 ถนนสันเหมือง ตำบลในเมือง อำเภอเมืองลำพูน จังหวัดลำพูน 51000',
+    phone: '081-706-0238',
+    taxId: '0515565000535',
+  };
+}
+
+async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
+  const po = prOpenedPoRecords.find((item) => item.po_id === poId);
+
+  if (!po) {
+    if (reservedPrintWindow && !reservedPrintWindow.closed) reservedPrintWindow.close();
+    showToast('ไม่พบข้อมูล PO นี้', 'error');
+    return;
+  }
+
+  const items = (po.items || []).filter((item) => !item._deleted);
+  const firstProduct = items.find((item) => item.product)?.product || '';
+  let vendorMeta = null;
+
+  if (firstProduct && typeof fetchAddDataProductVendorMeta === 'function') {
+    vendorMeta = await fetchAddDataProductVendorMeta(firstProduct);
+  }
+
+  const fallbackVendor = firstProduct ? getPrCompanyNameForProduct(firstProduct) : '';
+  const vendorName = vendorMeta?.vendorName || fallbackVendor || '-';
+  const vendorAddress = [vendorMeta?.address1, vendorMeta?.address2].filter(Boolean).join(' ');
+  const vendorPhone = vendorMeta?.phone || '';
+  const vendorEmail = vendorMeta?.email || '';
+  const company = getPrPoPrintCompanyInfo(po.center || '');
+  const subtotal = items.reduce((sum, item) => sum + getPrPoPrintLineTotal(item), 0);
+  const discount = 0;
+  const afterDiscount = subtotal - discount;
+  const vat = afterDiscount * 0.07;
+  const grandTotal = afterDiscount + vat;
+  const fillerRows = Math.max(0, 12 - items.length);
+
+  const itemRows = items.map((item) => {
+    const unitPrice = getPrPoPrintUnitPrice(item);
+    const lineTotal = getPrPoPrintLineTotal(item);
+    return `
+      <tr>
+        <td></td>
+        <td class="left-align">${escapeHtml(item.product || '-')}</td>
+        <td>${Number(item.qty || 0).toLocaleString('th-TH')}</td>
+        <td>${escapeHtml(item.unit || '-')}</td>
+        <td class="right-align">${unitPrice > 0 ? formatPrPoPrintMoney(unitPrice) : ''}</td>
+        <td></td>
+        <td class="right-align">${lineTotal > 0 ? formatPrPoPrintMoney(lineTotal) : ''}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const emptyRows = Array.from({ length: fillerRows }).map(() => `
+    <tr class="filler">
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+    </tr>
+  `).join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>ใบสั่งซื้อ ${escapeHtml(po.po_id || '')}</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: 'Sarabun', 'Tahoma', sans-serif;
+          font-size: 13px;
+          color: #333;
+          line-height: 1.5;
+          background: #e0e0e0;
+        }
+        .page {
+          width: 210mm;
+          min-height: 297mm;
+          margin: 8mm auto;
+          padding: 12mm 14mm;
+          background: #fff;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+        }
+        .header { text-align: center; margin-bottom: 6px; }
+        .company-name { font-size: 18px; font-weight: bold; color: #008000; }
+        .english-name { font-weight: bold; color: #0000ff; font-size: 15px; }
+        .header div { font-size: 12px; }
+        .title-section { position: relative; text-align: center; margin: 8px 0 6px; min-height: 44px; }
+        .doc-title { font-size: 20px; font-weight: bold; text-decoration: underline; display: inline-block; }
+        .doc-info { position: absolute; top: 0; right: 0; text-align: right; line-height: 1.6; font-size: 12px; }
+        .info-section { display: flex; border: 1px solid #000; border-radius: 3px; margin-bottom: 6px; font-size: 12px; }
+        .info-box-left { width: 55%; padding: 6px 8px; border-right: 1px solid #000; line-height: 1.65; }
+        .info-box-right { width: 45%; padding: 6px 8px; line-height: 1.65; }
+        .table-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        .product-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .product-table th, .product-table td { border: 1px solid #000; padding: 4px 5px; text-align: center; }
+        .product-table th { background: #f5f5f5; font-size: 12px; }
+        .product-table tbody tr.filler td {
+          height: 26px;
+          border-left: 1px solid #000;
+          border-right: 1px solid #000;
+          border-top: 1px solid #ddd;
+          border-bottom: 1px solid #ddd;
+        }
+        .left-align { text-align: left !important; }
+        .right-align { text-align: right !important; }
+        .footer-top-table, .footer-bottom-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .footer-top-table td, .footer-bottom-table td { border: 1px solid #000; padding: 4px 8px; vertical-align: top; }
+        .footer-bottom-table { margin-top: -1px; }
+        @media print {
+          body { background: none; }
+          .page { margin: 0; box-shadow: none; page-break-after: always; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="page">
+        <div class="header">
+          <div class="company-name">${escapeHtml(company.name)}</div>
+          <div>${escapeHtml(company.address)}</div>
+          <div>โทรศัพท์/โทรสาร ${escapeHtml(company.phone)} &nbsp;เลขประจำตัวผู้เสียภาษี ${escapeHtml(company.taxId)}</div>
+        </div>
+
+        <div class="title-section">
+          <div class="doc-title">ใบสั่งซื้อ</div>
+          <div class="doc-info">
+            <div><strong>เลขที่เอกสาร</strong> ${escapeHtml(po.po_id || '-')}</div>
+            <div><strong>วันที่เอกสาร</strong> ${escapeHtml(formatPrPoPrintDate(po.po_date))}</div>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <div class="info-box-left">
+            <strong>ชื่อผู้ขาย :</strong> ${escapeHtml(vendorName)}<br>
+            <strong>ที่อยู่ :</strong> ${escapeHtml(vendorAddress || '-')}<br>
+            <strong>โทร.</strong> ${escapeHtml(vendorPhone || '-')} &nbsp;<strong>E-mail:</strong> ${escapeHtml(vendorEmail || '-')}
+          </div>
+          <div class="info-box-right">
+            <strong>ผู้ติดต่อ :</strong><br>
+            <strong>วันที่ส่งของ :</strong><br>
+            <strong>เครดิต :</strong><br>
+            <strong>อ้างอิง PR :</strong> ${escapeHtml(po.pr_id || '-')}
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="product-table">
+            <thead>
+              <tr>
+                <th style="width:10%;">รหัสสินค้า</th>
+                <th style="width:35%;">รายการ</th>
+                <th style="width:10%;">จำนวน</th>
+                <th style="width:10%;">หน่วยนับ</th>
+                <th style="width:12%;">ราคา/หน่วย</th>
+                <th style="width:10%;">ส่วนลด</th>
+                <th style="width:13%;">จำนวนเงิน</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemRows || '<tr><td colspan="7">ไม่มีรายการสินค้า</td></tr>'}
+              ${emptyRows}
+            </tbody>
+          </table>
+        </div>
+
+        <table class="footer-top-table">
+          <tr>
+            <td style="width:65%; height:90px;" rowspan="4" class="left-align">
+              <strong>หมายเหตุ</strong><br>${escapeHtml(po.note || '')}
+            </td>
+            <td style="width:20%;" class="left-align">รวมเงิน</td>
+            <td style="width:15%;" class="right-align">${formatPrPoPrintMoney(subtotal)}</td>
+          </tr>
+          <tr>
+            <td class="left-align">ส่วนลดสินค้า (เป็นเงิน)</td>
+            <td class="right-align">${discount ? formatPrPoPrintMoney(discount) : ''}</td>
+          </tr>
+          <tr>
+            <td class="left-align">เงินหลังหักส่วนลด</td>
+            <td class="right-align">${formatPrPoPrintMoney(afterDiscount)}</td>
+          </tr>
+          <tr>
+            <td class="left-align">ภาษีมูลค่าเพิ่ม 7%</td>
+            <td class="right-align">${formatPrPoPrintMoney(vat)}</td>
+          </tr>
+          <tr>
+            <td style="text-align:center; font-weight:bold; background:#f5f5f5;"></td>
+            <td class="left-align" style="font-weight:bold;">จำนวนเงินทั้งสิ้น</td>
+            <td class="right-align" style="font-weight:bold;">${formatPrPoPrintMoney(grandTotal)}</td>
+          </tr>
+        </table>
+
+        <table class="footer-bottom-table">
+          <tr>
+            <td style="width:38%; line-height:1.6;">
+              <strong>เงื่อนไขอื่นๆ</strong><br>
+              (1) โปรดระบุเลขใบสั่งซื้อข้างต้นในใบส่งของทุกฉบับ<br>
+              (2) การวางบิลและการรับเช็ค เป็นไปตามกำหนดเวลาที่บริษัทกำหนดไว้<br>
+              (3) ในการวางบิลเพื่อเรียกเก็บ ให้แนบสำเนาใบสั่งซื้อกำกับมาด้วย
+            </td>
+            <td style="width:27%; text-align:center; vertical-align:bottom; padding-bottom:6px;">
+              <span style="font-weight:bold;">ผู้จัดทำ / ผู้ตรวจสอบ</span><br><br>
+              ${escapeHtml(po.po_person || '')}
+            </td>
+            <td style="width:35%; text-align:center; vertical-align:bottom; padding-bottom:6px;">
+              <span style="font-weight:bold;">ผู้มีอำนาจลงนาม</span>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <script>
+        window.onload = function () {
+          window.focus();
+          window.print();
+        };
+      </script>
+    </body>
+    </html>
+  `;
+
+  if (typeof openManagedPrintWindow === 'function') {
+    openManagedPrintWindow(html, 'ไม่สามารถพิมพ์ PO ได้', '', reservedPrintWindow);
+  }
+}
+
 function renderOpenPoPanel() {
   const panel = ensurePrPanel('pr_open_po', 'panel-pr-open-po');
   const approvedRecords = prApprovalRecords.filter(isPrApprovedRecord);
-  const availableApprovedRecords = approvedRecords.filter((record) => !prOpenedPrIds.has(record.po_id));
+  const availableApprovedRecords = approvedRecords.filter((record) => !isPrFullyOpenedAsPo(record));
   const selectedRecord = getSelectedApprovedPrForPo(availableApprovedRecords);
   if (selectedRecord) {
     ensurePrOpenPoRowsFromSelectedRecord(selectedRecord);
@@ -1403,19 +1864,25 @@ function bindPrOpenedPoFilters(panel) {
   const idInput = panel.querySelector('#pr-opened-po-filter-id');
   const button = panel.querySelector('#btn-pr-opened-po-filter');
 
-  const applyFilters = () => {
-    prOpenedPoFilters.dateFrom = dateFromInput?.value || '';
-    prOpenedPoFilters.dateTo = dateToInput?.value || '';
-    prOpenedPoFilters.center = centerSelect?.value || '';
-    prOpenedPoFilters.poId = idInput?.value || '';
-    renderOpenPoPanel();
-  };
-
-  button?.addEventListener('click', applyFilters);
-  centerSelect?.addEventListener('change', applyFilters);
+  button?.addEventListener('click', applyPrOpenedPoFilters);
+  centerSelect?.addEventListener('change', applyPrOpenedPoFilters);
   idInput?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') applyFilters();
+    if (event.key === 'Enter') applyPrOpenedPoFilters();
   });
+}
+
+function applyPrOpenedPoFilters() {
+  const panel = document.querySelector('[data-panel="pr_open_po"]');
+  const dateFromInput = panel?.querySelector('#pr-opened-po-filter-date-from');
+  const dateToInput = panel?.querySelector('#pr-opened-po-filter-date-to');
+  const centerSelect = panel?.querySelector('#pr-opened-po-filter-center');
+  const idInput = panel?.querySelector('#pr-opened-po-filter-id');
+
+  prOpenedPoFilters.dateFrom = dateFromInput?.value || '';
+  prOpenedPoFilters.dateTo = dateToInput?.value || '';
+  prOpenedPoFilters.center = centerSelect?.value || '';
+  prOpenedPoFilters.poId = idInput?.value || '';
+  renderOpenPoPanel();
 }
 
 function renderPrOpenedPoCard(po) {
@@ -1446,6 +1913,9 @@ function renderPrOpenedPoCard(po) {
         </div>
         <div class="pr-request-actions">
           <span class="pr-status-pill is-approved">เปิด PO แล้ว</span>
+          <button class="btn-po-edit" type="button" data-print-opened-po="${escapeHtml(po.po_id || '')}">
+            พิมพ์
+          </button>
           ${isFullyReceived ? `
             <span class="pr-status-pill is-approved">รับเข้าครบทุกรายการ</span>
           ` : isEditing ? '' : `
@@ -1797,12 +2267,17 @@ function getPrOpenedPoEditedItems(po, card) {
     const unitPrice = getPrOpenedPoNumber(rowEl?.querySelector('[data-opened-po-edit-unit-price]')?.value) || null;
     const totalPrice = unitPrice ? getPrPoCalculatedTotal(qty, unitPerBox, unitPrice) : 0;
     const unit = item.unit || getPrOpenPoBestStockUnit(product, po.center);
+    const openQty = item.po_open_qty ?? item.poOpenQty ?? item.ordered_qty ?? item.orderedQty ?? item.qty ?? qty;
 
     return {
       ...item,
       product,
       qty,
       unit,
+      po_open_qty: openQty,
+      poOpenQty: openQty,
+      ordered_qty: openQty,
+      orderedQty: openQty,
       unit_per_box: unitPerBox > 0 ? unitPerBox : null,
       unitPerBox: unitPerBox > 0 ? unitPerBox : null,
       unit_qty: unitQty,
@@ -1896,17 +2371,18 @@ function ensurePrOpenPoRowsFromSelectedRecord(record) {
 
   if (prOpenPoRows.length) return;
 
-  prOpenPoRows = (record.items || [])
-    .map((item, index) => ({
+  prOpenPoRows = getPrRemainingItemsForPo(record)
+    .map((item, index) => applyPrVendorCostDefaultsToRow({
       id: `po-row-${record.po_id || 'pr'}-${index}-${Math.random().toString(16).slice(2)}`,
-      itemIndex: String(index),
+      itemIndex: String(item.originalIndex ?? index),
       product: item.product || '',
       unit: item.unit || '',
       qty: String(Number(item.qty || 0) || ''),
       unitPerBox: '',
       unitQty: '',
+      unitPrice: '',
       total: '',
-    }));
+    }, item.product || '', { preserveQty: true }));
 }
 
 function getPrPoStockLocations() {
@@ -2040,6 +2516,17 @@ function bindPrOpenPoPanel(panel) {
     });
   });
 
+  panel.querySelectorAll('[data-print-opened-po]').forEach((button) => {
+    if (button.dataset.prBound === '1') return;
+    button.dataset.prBound = '1';
+    button.addEventListener('click', () => {
+      const reservedPrintWindow = typeof shouldOpenPrintInNewTab === 'function' && shouldOpenPrintInNewTab()
+        ? window.open('', '_blank')
+        : null;
+      printOpenedPoDocument(button.dataset.printOpenedPo || '', reservedPrintWindow);
+    });
+  });
+
   panel.querySelectorAll('[data-cancel-opened-po-edit]').forEach((button) => {
     button.addEventListener('click', () => {
       prOpenedPoEditingId = '';
@@ -2137,6 +2624,7 @@ function handlePrOpenPoRowChange(event) {
     if (item && !row.qty) {
       row.qty = String(Number(item.qty || 0) || '');
     }
+    applyPrVendorCostDefaultsToRow(row, row.product, { preserveQty: Boolean(item) });
     renderOpenPoPanel();
     return;
   }
@@ -2448,6 +2936,10 @@ async function savePrOpenPoDraft() {
       product,
       qty,
       unit,
+      po_open_qty: qty,
+      poOpenQty: qty,
+      ordered_qty: qty,
+      orderedQty: qty,
       unit_per_box: unitPerBox,
       unitPerBox,
       unit_qty: unitQty,
