@@ -1417,12 +1417,29 @@ function getPrPoPrintLineTotal(item = {}) {
 }
 
 function getPrPoPrintCompanyInfo(center = '') {
-  const companyName = getPrCenterDisplayName(center || '') || 'บริษัท ไตดีลำพูน จำกัด';
+  const centerName = String(center || '').trim();
+  const isMainStock = centerName === 'สต็อกใหญ่';
+  const companyInfoByCenter = {
+    'ไตบน': {
+      address: '257 ถนนสันเหมือง ตำบลในเมือง อำเภอเมือง จังหวัดลำพูน 51000',
+      registrationNo: '0115559023786',
+    },
+    'ไตล่าง': {
+      address: '267 ถนนสันเหมือง ตำบลในเมือง อำเภอเมือง จังหวัดลำพูน 51000',
+      registrationNo: '0515554000512',
+    },
+  };
+  const centerCompanyInfo = companyInfoByCenter[centerName] || {};
+  const companyName = isMainStock
+    ? 'บิลเงินสด'
+    : getPrCenterDisplayName(centerName) || 'บริษัท ไตดีลำพูน จำกัด';
   return {
     name: companyName,
-    address: '99/19 ถนนสันเหมือง ตำบลในเมือง อำเภอเมืองลำพูน จังหวัดลำพูน 51000',
+    documentTitle: isMainStock ? 'บิลเงินสด' : 'ใบสั่งซื้อ',
+    address: centerCompanyInfo.address || '99/19 ถนนสันเหมือง ตำบลในเมือง อำเภอเมืองลำพูน จังหวัดลำพูน 51000',
     phone: '081-706-0238',
-    taxId: '0515565000535',
+    registrationLabel: 'เลขทะเบียนนิติบุคคลเลขที่',
+    registrationNo: centerCompanyInfo.registrationNo || '0515565000535',
   };
 }
 
@@ -1573,11 +1590,11 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
         <div class="header">
           <div class="company-name">${escapeHtml(company.name)}</div>
           <div>${escapeHtml(company.address)}</div>
-          <div>โทรศัพท์/โทรสาร ${escapeHtml(company.phone)} &nbsp;เลขประจำตัวผู้เสียภาษี ${escapeHtml(company.taxId)}</div>
+          <div>โทรศัพท์/โทรสาร ${escapeHtml(company.phone)} &nbsp;${escapeHtml(company.registrationLabel)} ${escapeHtml(company.registrationNo)}</div>
         </div>
 
         <div class="title-section">
-          <div class="doc-title">ใบสั่งซื้อ</div>
+          <div class="doc-title">${escapeHtml(company.documentTitle || 'ใบสั่งซื้อ')}</div>
           <div class="doc-info">
             <div><strong>เลขที่เอกสาร</strong> ${escapeHtml(po.po_id || '-')}</div>
             <div><strong>วันที่เอกสาร</strong> ${escapeHtml(formatPrPoPrintDate(po.po_date))}</div>
