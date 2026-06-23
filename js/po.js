@@ -1449,12 +1449,16 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
   const vendorPhone = vendorMeta?.phone || '';
   const vendorEmail = vendorMeta?.email || '';
   const company = getPrPoPrintCompanyInfo(po.center || '');
-  const subtotal = items.reduce((sum, item) => sum + getPrPoPrintLineTotal(item), 0);
+  const grandTotal = items.reduce((sum, item) => sum + getPrPoPrintLineTotal(item), 0);
   const discount = 0;
-  const afterDiscount = subtotal - discount;
-  const vat = afterDiscount * 0.07;
-  const grandTotal = afterDiscount + vat;
-  const fillerRows = Math.max(0, 12 - items.length);
+  const afterDiscount = grandTotal / 1.07;
+  const subtotal = afterDiscount + discount;
+  const vat = grandTotal - afterDiscount;
+
+  // จากการวัดจริง: ลด 3 แถวเพื่อไม่ให้ล้น A4
+  const ROW_HEIGHT = 24;
+  const MAX_ROWS = 19; 
+  const fillerRows = Math.max(0, MAX_ROWS - items.length);
 
   const itemRows = items.map((item) => {
     const unitPrice = getPrPoPrintUnitPrice(item);
@@ -1498,7 +1502,7 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
           width: 210mm;
           min-height: 297mm;
           margin: 8mm auto;
-          padding: 12mm 14mm;
+          padding: 10mm 14mm;
           background: #fff;
           display: flex;
           flex-direction: column;
@@ -1506,33 +1510,61 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
         }
         .header { text-align: center; margin-bottom: 6px; }
         .company-name { font-size: 18px; font-weight: bold; color: #008000; }
-        .english-name { font-weight: bold; color: #0000ff; font-size: 15px; }
         .header div { font-size: 12px; }
         .title-section { position: relative; text-align: center; margin: 8px 0 6px; min-height: 44px; }
         .doc-title { font-size: 20px; font-weight: bold; text-decoration: underline; display: inline-block; }
         .doc-info { position: absolute; top: 0; right: 0; text-align: right; line-height: 1.6; font-size: 12px; }
-        .info-section { display: flex; border: 1px solid #000; border-radius: 3px; margin-bottom: 6px; font-size: 12px; }
+        .info-section { display: flex; border: 1px solid #000; border-radius: 3px; margin-bottom: 6px; font-size: 12px; flex-shrink: 0; }
         .info-box-left { width: 55%; padding: 6px 8px; border-right: 1px solid #000; line-height: 1.65; }
         .info-box-right { width: 45%; padding: 6px 8px; line-height: 1.65; }
-        .table-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+        .table-wrapper { overflow: hidden; }
         .product-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .product-table th, .product-table td { border: 1px solid #000; padding: 4px 5px; text-align: center; }
+        .product-table th, .product-table td { border: 1px solid #000; padding: 3px 5px; text-align: center; }
         .product-table th { background: #f5f5f5; font-size: 12px; }
-        .product-table tbody tr.filler td {
-          height: 26px;
-          border-left: 1px solid #000;
-          border-right: 1px solid #000;
-          border-top: 1px solid #ddd;
-          border-bottom: 1px solid #ddd;
+        .product-table tbody tr td {
+          height: 24px;
+          border-top: none !important;
+          border-bottom: none !important;
         }
+        .product-table tbody tr.filler td {
+          height: 24px !important;
+          border-left: 1px solid #000 !important;
+          border-right: 1px solid #000 !important;
+        }
+        .product-table tbody tr.filler:not(:last-child) td {
+          border-bottom: hidden !important;
+        }
+
         .left-align { text-align: left !important; }
         .right-align { text-align: right !important; }
-        .footer-top-table, .footer-bottom-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .footer-top-table td, .footer-bottom-table td { border: 1px solid #000; padding: 4px 8px; vertical-align: top; }
+
+        .footer-top-table, .footer-bottom-table { width: 100%; border-collapse: collapse; font-size: 12px; flex-shrink: 0; }
+        .footer-top-table td, .footer-bottom-table td { border: 1px solid #000; padding: 3px 8px; vertical-align: top; }
         .footer-bottom-table { margin-top: -1px; }
+
         @media print {
+          @page {
+            size: A4;
+            margin: 0; /* ลบขอบกระดาษและหัวกระดาษเริ่มต้นของ Browser */
+          }
           body { background: none; }
-          .page { margin: 0; box-shadow: none; page-break-after: always; }
+          .page {
+            margin: 0;
+            box-shadow: none;
+            min-height: unset;
+            height: 297mm;
+            overflow: hidden;
+            page-break-after: always;
+          }
+        }
+        
+        .product-table td.left-align {
+          text-align: left !important;
+          white-space: nowrap;       /* ห้ามขึ้นบรรทัดใหม่ */
+          overflow: hidden;          /* ซ่อนส่วนที่เกิน */
+          text-overflow: ellipsis;   /* แสดง ... ท้ายข้อความ */
+          max-width: 280px;          /* จำกัดความกว้างคอลัมน์รายการ (ปรับตัวเลขตามชอบ) */
         }
       </style>
     </head>
@@ -1559,9 +1591,9 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
             <strong>โทร.</strong> ${escapeHtml(vendorPhone || '-')} &nbsp;<strong>E-mail:</strong> ${escapeHtml(vendorEmail || '-')}
           </div>
           <div class="info-box-right">
-            <strong>ผู้ติดต่อ :</strong><br>
+            <strong>ผู้ติดต่อ :</strong> ${escapeHtml(po.po_person || '-')}<br>
             <strong>วันที่ส่งของ :</strong><br>
-            <strong>เครดิต :</strong><br>
+            <strong>เครดิต :</strong> 90 วัน<br>
             <strong>อ้างอิง PR :</strong> ${escapeHtml(po.pr_id || '-')}
           </div>
         </div>
@@ -1588,7 +1620,7 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
 
         <table class="footer-top-table">
           <tr>
-            <td style="width:65%; height:90px;" rowspan="4" class="left-align">
+            <td style="width:65%;" rowspan="5" class="left-align">
               <strong>หมายเหตุ</strong><br>${escapeHtml(po.note || '')}
             </td>
             <td style="width:20%;" class="left-align">รวมเงิน</td>
@@ -1607,7 +1639,6 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
             <td class="right-align">${formatPrPoPrintMoney(vat)}</td>
           </tr>
           <tr>
-            <td style="text-align:center; font-weight:bold; background:#f5f5f5;"></td>
             <td class="left-align" style="font-weight:bold;">จำนวนเงินทั้งสิ้น</td>
             <td class="right-align" style="font-weight:bold;">${formatPrPoPrintMoney(grandTotal)}</td>
           </tr>
@@ -1622,10 +1653,10 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
               (3) ในการวางบิลเพื่อเรียกเก็บ ให้แนบสำเนาใบสั่งซื้อกำกับมาด้วย
             </td>
             <td style="width:27%; text-align:center; vertical-align:bottom; padding-bottom:6px;">
-              <span style="font-weight:bold;">ผู้จัดทำ / ผู้ตรวจสอบ</span><br><br>
+              <span style="font-weight:bold;">ผู้จัดทำ / ผู้ตรวจสอบ</span><br>
               ${escapeHtml(po.po_person || '')}
             </td>
-            <td style="width:35%; text-align:center; vertical-align:bottom; padding-bottom:6px;">
+            <td style="width:35%; text-align:center; vertical-align:bottom; padding-bottom:15px;">
               <span style="font-weight:bold;">ผู้มีอำนาจลงนาม</span>
             </td>
           </tr>
