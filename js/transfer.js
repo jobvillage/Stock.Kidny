@@ -1739,8 +1739,8 @@ function renderPoCmoForm() {
           <label for="pr-history-status">สถานะ PR</label>
           <select id="pr-history-status">
             <option value="">ทุกสถานะ</option>
-            <option value="pr_pending_approval" selected>รออนุมัติ</option>
-            <option value="pr_approved">อนุมัติแล้ว</option>
+            <option value="pr_pending_approval">รออนุมัติ</option>
+            <option value="pr_approved" selected>อนุมัติแล้ว</option>
             <option value="cancelled">ยกเลิก</option>
           </select>
         </div>
@@ -1793,14 +1793,30 @@ function getPrOpenHistoryStatusText(status = '') {
   return 'รออนุมัติ';
 }
 
+function isPrOpenRecordApproved(record) {
+  const status = String(record?.status || '').toLowerCase();
+  return status === 'pr_approved'
+    || status === 'approved'
+    || Boolean(record?.pr_daeng_approved_at && record?.pr_toy_approved_at);
+}
+
+function isPrOpenRecordCancelled(record) {
+  return String(record?.status || '').toLowerCase() === 'cancelled';
+}
+
+function isPrOpenRecordWaiting(record) {
+  return !isPrOpenRecordApproved(record) && !isPrOpenRecordCancelled(record);
+}
+
+function isPrOpenRecordHistory(record) {
+  return isPrOpenRecordApproved(record) || isPrOpenRecordCancelled(record);
+}
+
 function canEditPrOpenRecord(record) {
   if (!record) return false;
 
   const status = String(record.status || '').toLowerCase();
-  const isApproved = status === 'pr_approved'
-    || status === 'approved'
-    || Boolean(record.pr_daeng_approved_at && record.pr_toy_approved_at);
-  if (isApproved || status === 'cancelled') return false;
+  if (isPrOpenRecordApproved(record) || status === 'cancelled') return false;
 
   if (currentUser?.role === 'admin' || currentUser?.role === 'adminR') return true;
   if (currentUser?.role !== 'center_staff') return false;
@@ -1818,7 +1834,7 @@ function renderPrOpenHistoryCards(records = [], options = {}) {
   return records.map((record) => {
     const items = normalizeItems(record.items);
     const statusText = getPrOpenHistoryStatusText(record.status);
-    const isApproved = statusText === 'อนุมัติแล้ว';
+    const isApproved = isPrOpenRecordApproved(record);
     const showActions = options.showActions === true && canEditPrOpenRecord(record);
     const itemRows = items.map((item) => {
       const unit = String(item.unit || item.Unit || '').trim();
@@ -1924,10 +1940,7 @@ async function fetchPrOpenPending() {
 
     window.currentPrOpenPendingList = (data || [])
       .filter((record) => String(record.po_id || '').toUpperCase().startsWith('PR-'))
-      .filter((record) => {
-        const status = String(record.status || '').toLowerCase();
-        return status === 'pr_draft' || status === 'draft' || !status;
-      })
+      .filter((record) => isPrOpenRecordWaiting(record))
       .filter((record) => {
         if (currentUser?.role !== 'center_staff' || !currentUser.center) return true;
         return !record.center || record.center === currentUser.center;
@@ -1965,7 +1978,12 @@ async function fetchPrOpenHistory() {
     const searchText = prId.toLowerCase();
     window.currentPrOpenHistoryList = (data || [])
       .filter((record) => String(record.po_id || '').toUpperCase().startsWith('PR-'))
-      .filter((record) => !status || String(record.status || '') === status)
+      .filter((record) => {
+        if (!status) return isPrOpenRecordHistory(record);
+        if (status === 'pr_approved') return isPrOpenRecordApproved(record);
+        if (status === 'pr_pending_approval') return isPrOpenRecordWaiting(record);
+        return String(record.status || '') === status;
+      })
       .filter((record) => !center || String(record.center || '') === center)
       .filter((record) => !searchText || String(record.po_id || '').toLowerCase().includes(searchText));
 

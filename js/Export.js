@@ -34,7 +34,7 @@ const EXPORT_TABLES = [
     key: 'transactions',
     label: 'transactions',
     hasDate: true, dateCol: 'created_at', productCol: 'product', centerCol: 'center',
-    includeCols: ['created_at', 'action', 'request_id', 'product', 'qty', 'fifo_unit_cost', 'fifo_cost_total', 'center'],
+    includeCols: ['created_at', 'action', 'request_id', 'product', 'qty', 'fifo_unit_cost', 'fifo_cost_total', 'center', 'note'],
   },
 ];
 
@@ -245,33 +245,49 @@ function expandJsonbRows(data, filterProduct) {
 }
 
 async function fetchExportTableData(tableDef, dateFrom, dateTo, product, center) {
-  let query = supabaseClient.from(tableDef.key).select('*');
+  const pageSize = 1000;
+  const allRows = [];
+  let page = 0;
 
-  if (tableDef.hasDate && tableDef.dateCol) {
-    if (dateFrom) query = query.gte(tableDef.dateCol, `${dateFrom}T00:00:00+00:00`);
-    if (dateTo)   query = query.lte(tableDef.dateCol, `${dateTo}T23:59:59+00:00`);
-  }
+  while (true) {
+    let query = supabaseClient.from(tableDef.key).select('*');
 
-  if (product && tableDef.productCol) {
-    query = query.ilike(tableDef.productCol, `%${product}%`);
-  }
-
-  if (center) {
-    const centerCol = tableDef.centerCol || 'center';
-    // ✅ เพิ่ม po_cmo_requests
-    const hasCenterCol = ['transactions', 'stock_items', 'stock_lots', 'stock_requests', 'po_cmo_requests'].includes(tableDef.key);
-    const hasCustomCenter = !!tableDef.centerCol;
-    if (hasCenterCol || hasCustomCenter) {
-      query = query.eq(centerCol, center);
+    if (tableDef.hasDate && tableDef.dateCol) {
+      if (dateFrom) query = query.gte(tableDef.dateCol, `${dateFrom}T00:00:00+00:00`);
+      if (dateTo)   query = query.lte(tableDef.dateCol, `${dateTo}T23:59:59+00:00`);
     }
+
+    if (product && tableDef.productCol) {
+      query = query.ilike(tableDef.productCol, `%${product}%`);
+    }
+
+    if (center) {
+      const centerCol = tableDef.centerCol || 'center';
+      // ✅ เพิ่ม po_cmo_requests
+      const hasCenterCol = ['transactions', 'stock_items', 'stock_lots', 'stock_requests', 'po_cmo_requests'].includes(tableDef.key);
+      const hasCustomCenter = !!tableDef.centerCol;
+      if (hasCenterCol || hasCustomCenter) {
+        query = query.eq(centerCol, center);
+      }
+    }
+
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    query = query
+      .order(tableDef.dateCol || 'id', { ascending: true })
+      .range(from, to);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    allRows.push(...rows);
+
+    if (rows.length < pageSize) break;
+    page += 1;
   }
 
-  query = query.order(tableDef.dateCol || 'id', { ascending: true });
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const expanded = expandJsonbRows(data || [], product);
+  const expanded = expandJsonbRows(allRows, product);
 
   if (tableDef.includeCols?.length) {
   const dateCols = ['created_at', 'picked_at', 'received_at', 'po_date', 'updated_at'];

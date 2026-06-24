@@ -2374,6 +2374,15 @@ button {
   font-weight: 800;
 }
 
+.pr-add-data-cost-row input.is-calculated,
+.pr-add-data-cost-row input[readonly] {
+  background: #eef2f7;
+  color: #64748b;
+  border-color: #dbe3ee;
+  cursor: default;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
 @media (max-width: 720px) {
   .pr-add-data-cost-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));

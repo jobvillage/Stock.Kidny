@@ -3216,7 +3216,7 @@ function renderAddDataPanel() {
           <div class="field-group field-group-full">
             <label>Cost สินค้า</label>
             <div class="pr-add-data-cost-row">
-              <input id="add-data-cost-qty" type="number" min="0" step="0.001" inputmode="decimal" placeholder="จำนวน" />
+              <input id="add-data-cost-qty" class="is-calculated" type="number" min="0" step="0.001" inputmode="decimal" placeholder="จำนวน" readonly />
               <input id="add-data-cost-unit-qty" type="number" min="0" step="0.001" inputmode="decimal" placeholder="จำนวนชิ้น" />
               <input id="add-data-cost-unit-price" type="text" inputmode="decimal" placeholder="ราคาต่อชิ้น" />
               <input id="add-data-cost-total-price" type="text" inputmode="decimal" placeholder="ราคารวม" />
@@ -3261,6 +3261,7 @@ function enhanceAddDataLocationChecks() {
     const label = input.closest('.pr-location-check');
     const syncCheckedState = () => {
       label?.classList.toggle('is-checked', input.checked);
+      updateAddDataCostQtyFromSelectedStock();
     };
 
     input.addEventListener('change', syncCheckedState);
@@ -3293,8 +3294,28 @@ function enhanceAddDataStockQtyInputs() {
   document.querySelectorAll('[data-add-data-stock-qty]').forEach((input) => {
     input.addEventListener('input', () => {
       syncAddDataLocationFromQty(input.dataset.addDataStockQty || '', input.value);
+      updateAddDataCostQtyFromSelectedStock();
     });
   });
+}
+
+function getAddDataSelectedStockQtyTotal() {
+  return Array.from(document.querySelectorAll('[data-add-data-location]:checked'))
+    .reduce((total, checkbox) => {
+      const center = checkbox.value || '';
+      const input = getAddDataStockQtyInput(center);
+      const qty = Number(input?.value || 0);
+      return total + (Number.isFinite(qty) && qty > 0 ? qty : 0);
+    }, 0);
+}
+
+function updateAddDataCostQtyFromSelectedStock() {
+  const qtyInput = document.getElementById('add-data-cost-qty');
+  if (!qtyInput) return;
+
+  const totalQty = getAddDataSelectedStockQtyTotal();
+  qtyInput.value = totalQty > 0 ? String(totalQty) : '';
+  refreshAddDataCostCalculation('qty');
 }
 
 function parseAddDataDecimal(value) {
@@ -3678,6 +3699,8 @@ function setAddDataFieldValue(id, value) {
 }
 
 function resetAddDataForm() {
+  window.addDataProductSelectionSeq = (window.addDataProductSelectionSeq || 0) + 1;
+
   [
     'add-data-vendor-name',
     'add-data-vendor-address-1',
@@ -3710,6 +3733,8 @@ function resetAddDataForm() {
   document.querySelectorAll('[data-add-data-stock-qty], [data-add-data-current-stock-qty]').forEach((input) => {
     input.value = '';
   });
+
+  updateAddDataCostQtyFromSelectedStock();
 }
 
 function getAddDataExistingStockCenters(product) {
@@ -3750,6 +3775,8 @@ function setAddDataLocationChecks(locations) {
     input.checked = selected.has(center);
     input.closest('.pr-location-check')?.classList.toggle('is-checked', input.checked);
   });
+
+  updateAddDataCostQtyFromSelectedStock();
 }
 
 function getAddDataStockQtyMap(product) {
@@ -3837,6 +3864,8 @@ function setAddDataStockQtyInputs(qtyMap = {}) {
   document.querySelectorAll('[data-add-data-stock-qty]').forEach((input) => {
     input.value = '';
   });
+
+  updateAddDataCostQtyFromSelectedStock();
 }
 
 function getAddDataSelectedStockQtyMap() {
@@ -3924,9 +3953,43 @@ function getAddDataProductType(product) {
   return getPrProductTypeForProduct(selectedProduct);
 }
 
+function clearAddDataProductDetails() {
+  [
+    'add-data-vendor-name',
+    'add-data-vendor-address-1',
+    'add-data-vendor-address-2',
+    'add-data-vendor-phone',
+    'add-data-vendor-email',
+    'add-data-product-name',
+    'add-data-product-type',
+    'add-data-product-unit',
+    'add-data-cost-qty',
+    'add-data-cost-unit-qty',
+    'add-data-cost-unit-price',
+    'add-data-cost-total-price',
+  ].forEach((id) => setAddDataFieldValue(id, ''));
+
+  document.querySelectorAll('[data-add-data-location]').forEach((input) => {
+    input.checked = false;
+    input.closest('.pr-location-check')?.classList.remove('is-checked');
+  });
+
+  document.querySelectorAll('[data-add-data-stock-qty], [data-add-data-current-stock-qty]').forEach((input) => {
+    input.value = '';
+  });
+
+  updateAddDataCostQtyFromSelectedStock();
+}
+
 async function handleAddDataProductSelection(product) {
   const selectedProduct = String(product || '').trim();
-  if (!selectedProduct) return;
+  window.addDataProductSelectionSeq = (window.addDataProductSelectionSeq || 0) + 1;
+  const selectionSeq = window.addDataProductSelectionSeq;
+
+  if (!selectedProduct) {
+    clearAddDataProductDetails();
+    return;
+  }
 
   const meta = await fetchAddDataProductVendorMeta(selectedProduct);
   const fallbackCompany = typeof getPrCompanyNameForProduct === 'function'
@@ -3942,6 +4005,8 @@ async function handleAddDataProductSelection(product) {
     ? getAddDataStockQtyMapFromRows(stockRows)
     : getAddDataStockQtyMap(selectedProduct);
 
+  if (selectionSeq !== window.addDataProductSelectionSeq) return;
+
   setAddDataFieldValue('add-data-vendor-name', meta?.vendorName || (fallbackCompany && fallbackCompany !== 'ทั่วไป' ? fallbackCompany : ''));
   setAddDataFieldValue('add-data-vendor-address-1', meta?.address1 || '');
   setAddDataFieldValue('add-data-vendor-address-2', meta?.address2 || '');
@@ -3949,7 +4014,7 @@ async function handleAddDataProductSelection(product) {
   setAddDataFieldValue('add-data-vendor-email', meta?.email || '');
   setAddDataFieldValue('add-data-product-type', productType);
   setAddDataFieldValue('add-data-product-unit', meta?.unit || stockUnit);
-  setAddDataFieldValue('add-data-cost-qty', meta?.costQty || '');
+  setAddDataFieldValue('add-data-cost-qty', '');
   setAddDataFieldValue('add-data-cost-unit-qty', meta?.costUnitQty || '');
   setAddDataFieldValue('add-data-cost-unit-price', meta?.costUnitPrice || '');
   setAddDataFieldValue('add-data-cost-total-price', meta?.costTotalPrice || '');
@@ -3959,7 +4024,7 @@ async function handleAddDataProductSelection(product) {
 
   setAddDataLocationChecks(stockLocations);
   setAddDataStockQtyInputs(stockQtyMap);
-  refreshAddDataCostCalculation('total');
+  updateAddDataCostQtyFromSelectedStock();
 }
 
 async function saveAddDataVendorProduct(button) {
