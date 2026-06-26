@@ -2,8 +2,10 @@
 // AUTH / PERMISSIONS
 // =====================
 const AUTH_SESSION_KEY = 'stock_app_session_v1';
+const AUTH_CLEAR_LOGIN_KEY = 'stock_app_clear_login_once';
 
 let currentUser = null;
+let isLoginInProgress = false;
 
 const ROLE_PERMISSIONS = {
   stock_receiver: ['in', 'pending', 'po_status', 'stock'],
@@ -43,8 +45,11 @@ const ROLE_LABELS = {
 };
 
 async function login() {
+  if (isLoginInProgress) return;
+
   const codeInput = document.getElementById('login-code');
   const passwordInput = document.getElementById('login-password');
+  const loginButton = document.getElementById('btn-login');
 
   const staffCode = String(codeInput?.value || '').trim().toLowerCase();
   const password = String(passwordInput?.value || '').trim();
@@ -53,6 +58,9 @@ async function login() {
     showToast('⚠️ กรุณากรอกรหัสเจ้าหน้าที่และรหัสผ่าน', 'error');
     return;
   }
+
+  isLoginInProgress = true;
+  if (loginButton) loginButton.disabled = true;
 
   showToast('', 'loading', 'กำลังเข้าสู่ระบบ...');
 
@@ -102,6 +110,9 @@ async function login() {
   } catch (error) {
     console.error('Supabase login error:', error);
     showToast(`❌ ${error.message || 'เชื่อมต่อระบบ Login ไม่สำเร็จ'}`, 'error');
+  } finally {
+    isLoginInProgress = false;
+    if (loginButton) loginButton.disabled = false;
   }
 }
 
@@ -111,9 +122,6 @@ async function logout() {
   }
 
   stopAutoRefresh();
-  localStorage.removeItem(AUTH_SESSION_KEY);
-  currentUser = null;
-  location.reload();
   if (typeof stopRealtime === 'function') {
     stopRealtime();
   }
@@ -121,6 +129,12 @@ async function logout() {
   if (typeof window.stopRequestNotificationPolling === 'function') {
     window.stopRequestNotificationPolling();
   }
+
+  localStorage.removeItem(AUTH_SESSION_KEY);
+  sessionStorage.setItem(AUTH_CLEAR_LOGIN_KEY, '1');
+  currentUser = null;
+  isLoginInProgress = false;
+  location.reload();
 }
 
 function togglePasswordVisibility() {
@@ -169,10 +183,33 @@ function showLoginScreen() {
   if (loginScreen) loginScreen.hidden = false;
   if (appShell) appShell.hidden = true;
 
+  const shouldClearLogin = sessionStorage.getItem(AUTH_CLEAR_LOGIN_KEY) === '1';
+  if (shouldClearLogin) {
+    sessionStorage.removeItem(AUTH_CLEAR_LOGIN_KEY);
+  }
+
+  const clearLoginInputs = () => {
+    if (!shouldClearLogin) return;
+
+    const codeInput = document.getElementById('login-code');
+    const passwordInput = document.getElementById('login-password');
+    if (codeInput) codeInput.value = '';
+    if (passwordInput) {
+      passwordInput.value = '';
+      passwordInput.type = 'password';
+    }
+  };
+
+  clearLoginInputs();
+  setTimeout(clearLoginInputs, 120);
+  setTimeout(clearLoginInputs, 500);
+
   requestAnimationFrame(() => {
     if (typeof resetLoginInputsAfterPrint === 'function') {
       resetLoginInputsAfterPrint();
     }
+
+    clearLoginInputs();
 
     const codeInput = document.getElementById('login-code');
     if (!codeInput) return;

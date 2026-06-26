@@ -370,6 +370,19 @@ button {
   box-shadow: 0 0 0 4px rgba(255, 138, 52, 0.14);
 }
 
+.field-char-counter {
+  display: block;
+  margin: 6px 4px 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.field-char-counter.is-warning {
+  color: #b45309;
+}
+
 .section-divider {
   height: 1px;
   margin: 20px 0;
@@ -1322,6 +1335,93 @@ button {
   box-shadow: none;
 }
 
+.pr-product-rename-box {
+  padding: 14px;
+  border: 1px solid #e3ebf5;
+  border-radius: 18px;
+  background: #f8fbff;
+}
+
+.pr-product-rename-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(210px, 240px) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.pr-product-rename-history {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-height: unset;
+  height: unset;
+  padding: 12px 14px;
+  border: 1px solid #e3e8ef;
+  border-radius: 14px;
+  background: #f8fafc;
+  font-weight: 800;
+  width: 100%;
+}
+
+.pr-product-rename-history .pr-rename-check-box {
+  display: block;
+  width: 42px;
+  height: 32px;
+  min-width: 42px;
+  border: 1.5px solid #d9e1ea;
+  border-radius: 12px;
+  background: #ffffff;
+  flex: 0 0 auto;
+}
+
+#add-data-product-rename-history {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  cursor: pointer !important;
+  z-index: 2 !important;
+}
+
+.pr-product-rename-history .pr-location-check-text {
+  display: inline-block;
+  min-width: 0;
+  color: #667085;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.pr-product-rename-hint {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .pr-product-rename-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pr-product-rename-row .btn-add-row,
+  .pr-product-rename-history {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .pr-main-card,
 .pr-summary-card {
   width: 100%;
@@ -2260,16 +2360,25 @@ button {
   font-weight: 800;
 }
 
-.pr-check-grid .pr-location-check {
+.pr-location-check {
   position: relative;
-  min-height: 58px;
-  padding: 10px 14px;
+  display: flex !important;          
+  flex-direction: row !important;    
+  justify-content: center;           
+  gap: 8px;
+  align-items: center;
+  min-height: 48px;
+  padding: 5px 14px;
+  border: 1px solid #e3e8ef;
+  border-radius: 14px;
+  background: #f8fafc;
+  font-weight: 800;
   cursor: pointer;
   user-select: none;
   transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
-.pr-location-check input[data-add-data-location] {
+.pr-location-check input[type="checkbox"] {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -2298,21 +2407,21 @@ button {
 }
 
 .pr-location-check.is-checked,
-.pr-location-check:has(input[data-add-data-location]:checked) {
+.pr-location-check:has(input[type="checkbox"]:checked) {
   border-color: #34d399;
   background: #ecfdf5;
   box-shadow: 0 8px 18px rgba(16, 185, 129, 0.14);
 }
 
 .pr-location-check.is-checked .pr-location-check-box,
-.pr-location-check:has(input[data-add-data-location]:checked) .pr-location-check-box {
+.pr-location-check:has(input[type="checkbox"]:checked) .pr-location-check-box {
   border-color: #10b981;
   background: #10b981;
   box-shadow: inset 0 0 0 8px #ffffff;
 }
 
 .pr-location-check.is-checked .pr-location-check-text,
-.pr-location-check:has(input[data-add-data-location]:checked) .pr-location-check-text {
+.pr-location-check:has(input[type="checkbox"]:checked) .pr-location-check-text {
   color: #0f766e;
 }
 
@@ -2511,6 +2620,7 @@ button {
 
   .pr-open-po-row .qty-input-with-unit,
   .pr-open-po-row label[data-label="ต่อกล่อง"],
+  .pr-open-po-row label[data-label="ราคาต่อหน่วย"],
   .pr-open-po-row .pr-unit-price,
   .pr-open-po-row label[data-label="ราคารวม"] {
     grid-column: 1 / -1;
@@ -5589,7 +5699,8 @@ button {
   color: #be123c;
 }
 
-.po-item-row.is-received-complete {
+.po-item-row.is-received-complete,
+.pr-item-row.is-received-complete {
   opacity: 0.55;
   background: #f8fafc;
 }

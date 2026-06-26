@@ -1,5 +1,6 @@
 const PR_APPROVER_CODES = ['user1', 'user2'];
 const PR_PO_MANAGER_CODES = ['user3', 'user4'];
+const ADD_DATA_VENDOR_ADDRESS_MAX_LENGTH = 64;
 const PR_APPROVER_BY_CODE = {
   user1: 'daeng',
   user2: 'toy',
@@ -1462,7 +1463,12 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
 
   const fallbackVendor = firstProduct ? getPrCompanyNameForProduct(firstProduct) : '';
   const vendorName = vendorMeta?.vendorName || fallbackVendor || '-';
-  const vendorAddress = [vendorMeta?.address1, vendorMeta?.address2].filter(Boolean).join(' ');
+  const vendorAddressLines = [vendorMeta?.address1, vendorMeta?.address2]
+    .map((line) => String(line || '').trim())
+    .filter(Boolean);
+  const vendorAddressHtml = vendorAddressLines.length
+    ? vendorAddressLines.map((line) => `<span>${escapeHtml(line)}</span>`).join('')
+    : '<span>-</span>';
   const vendorPhone = vendorMeta?.phone || '';
   const vendorEmail = vendorMeta?.email || '';
   const company = getPrPoPrintCompanyInfo(po.center || '');
@@ -1534,6 +1540,9 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
         .info-section { display: flex; border: 1px solid #000; border-radius: 3px; margin-bottom: 6px; font-size: 12px; flex-shrink: 0; }
         .info-box-left { width: 55%; padding: 6px 8px; border-right: 1px solid #000; line-height: 1.65; }
         .info-box-right { width: 45%; padding: 6px 8px; line-height: 1.65; }
+        .vendor-address-line { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px; align-items: start; }
+        .vendor-address-line > div { min-width: 0; }
+        .vendor-address-line span { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .table-wrapper { overflow: hidden; }
         .product-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -1604,7 +1613,7 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
         <div class="info-section">
           <div class="info-box-left">
             <strong>ชื่อผู้ขาย :</strong> ${escapeHtml(vendorName)}<br>
-            <strong>ที่อยู่ :</strong> ${escapeHtml(vendorAddress || '-')}<br>
+            <div class="vendor-address-line"><strong>ที่อยู่ :</strong><div>${vendorAddressHtml}</div></div>
             <strong>โทร.</strong> ${escapeHtml(vendorPhone || '-')} &nbsp;<strong>E-mail:</strong> ${escapeHtml(vendorEmail || '-')}
           </div>
           <div class="info-box-right">
@@ -1942,8 +1951,8 @@ function renderPrOpenedPoCard(po) {
     ? editRows
         .map(({ item, index, isNew }, visibleIndex, visibleRows) => renderPrOpenedPoEditRow(po, item, index, isNew, visibleIndex, visibleRows.length))
         .join('')
-    : visibleItems.map((item) => `
-      <div class="pr-item-row">
+    : visibleItems.map((item, index) => `
+      <div class="pr-item-row ${isPrOpenedPoItemReceived(po, item, index) ? 'is-received-complete' : ''}">
         <strong>${escapeHtml(item.product || '-')}</strong>
         <span>${Number(item.qty || 0).toLocaleString()}</span>
         <span>${escapeHtml(item.unit || '-')}</span>
@@ -2016,43 +2025,61 @@ function renderPrOpenedPoCard(po) {
   `;
 }
 
+function getPrOpenedPoReceivedMaps(po = {}) {
+  const receivedItems = normalizeItems(po.received_items || po.receivedItems);
+  const receivedByLine = new Map();
+  const receivedByProduct = new Map();
+
+  receivedItems.forEach((received) => {
+    const qty = Number(
+      received.qty
+      ?? received.quantity
+      ?? received.received_qty
+      ?? received.receivedQty
+      ?? received.receive_qty
+      ?? received.receiveQty
+      ?? 0
+    ) || 0;
+    const lineIndexValue = received.line_index ?? received.lineIndex ?? received.po_line_index ?? received.poLineIndex;
+    const lineIndex = Number(lineIndexValue);
+    const product = String(received.product || received.name || '').trim();
+    const productKey = getPrOpenPoProductKey(product);
+
+    if (Number.isInteger(lineIndex) && lineIndex >= 0) {
+      receivedByLine.set(lineIndex, (receivedByLine.get(lineIndex) || 0) + qty);
+    }
+
+    if (productKey) {
+      receivedByProduct.set(productKey, (receivedByProduct.get(productKey) || 0) + qty);
+    }
+  });
+
+  return { receivedByLine, receivedByProduct };
+}
+
+function isPrOpenedPoItemReceived(po = {}, item = {}, index = 0) {
+  if (String(po.status || '').toLowerCase() === 'received') return true;
+
+  const orderedQty = Number(item.qty || item.quantity || 0) || 0;
+  if (orderedQty <= 0) return true;
+
+  const { receivedByLine, receivedByProduct } = getPrOpenedPoReceivedMaps(po);
+  const product = String(item.product || item.name || '').trim();
+  const productKey = getPrOpenPoProductKey(product);
+  const receivedQty = receivedByLine.has(index)
+    ? receivedByLine.get(index)
+    : (receivedByProduct.get(productKey) || 0);
+
+  return receivedQty >= orderedQty;
+}
+
 function isPrOpenedPoFullyReceived(po = {}) {
   if (String(po.status || '').toLowerCase() === 'received') return true;
 
   const items = (po.items || []).filter((item) => !item._deleted);
   if (!items.length) return false;
 
-  const receivedItems = normalizeItems(po.received_items || po.receivedItems);
-  const receivedByLine = new Map();
-  const receivedByProduct = new Map();
-
-  receivedItems.forEach((received) => {
-    const qty = Number(received.qty || received.quantity || 0) || 0;
-    const lineIndexValue = received.line_index ?? received.lineIndex ?? received.po_line_index ?? received.poLineIndex;
-    const lineIndex = Number(lineIndexValue);
-    const product = String(received.product || received.name || '').trim();
-
-    if (Number.isInteger(lineIndex) && lineIndex >= 0) {
-      receivedByLine.set(lineIndex, (receivedByLine.get(lineIndex) || 0) + qty);
-      return;
-    }
-
-    if (product) {
-      receivedByProduct.set(product, (receivedByProduct.get(product) || 0) + qty);
-    }
-  });
-
-  return items.every((item, index) => {
-    const orderedQty = Number(item.qty || item.quantity || 0) || 0;
-    if (orderedQty <= 0) return true;
-
-    const product = String(item.product || item.name || '').trim();
-    const receivedQty = receivedByLine.has(index)
-      ? receivedByLine.get(index)
-      : (receivedByProduct.get(product) || 0);
-
-    return receivedQty >= orderedQty;
-  });
+  return items.every((item, index) => isPrOpenedPoItemReceived(po, item, index));
 }
 
 function getPrOpenedPoNumber(value) {
@@ -3123,11 +3150,13 @@ function renderAddDataPanel() {
             </div>
             <div class="field-group field-group-full">
               <label>ที่อยู่ 1</label>
-              <input id="add-data-vendor-address-1" type="text" placeholder="ที่อยู่บรรทัดที่ 1" />
+              <input id="add-data-vendor-address-1" type="text" maxlength="${ADD_DATA_VENDOR_ADDRESS_MAX_LENGTH}" placeholder="ที่อยู่บรรทัดที่ 1" data-add-data-address-counter="add-data-vendor-address-1-counter" />
+              <small class="field-char-counter" id="add-data-vendor-address-1-counter"></small>
             </div>
             <div class="field-group field-group-full">
               <label>ที่อยู่ 2</label>
-              <input id="add-data-vendor-address-2" type="text" placeholder="ที่อยู่บรรทัดที่ 2" />
+              <input id="add-data-vendor-address-2" type="text" maxlength="${ADD_DATA_VENDOR_ADDRESS_MAX_LENGTH}" placeholder="ที่อยู่บรรทัดที่ 2" data-add-data-address-counter="add-data-vendor-address-2-counter" />
+              <small class="field-char-counter" id="add-data-vendor-address-2-counter"></small>
             </div>
             <div class="field-group">
               <label>เบอร์โทร</label>
@@ -3155,7 +3184,6 @@ function renderAddDataPanel() {
             <label>Product type</label>
             <select id="add-data-product-type">
               <option value="">พิมพ์หรือเลือก Product type</option>
-              ${getAddDataProductTypeOptions()}
             </select>
           </div>
           <div class="field-group field-group-full">
@@ -3164,6 +3192,19 @@ function renderAddDataPanel() {
               <option value="">— เลือกสินค้าจาก Stock —</option>
               ${typeof getProductOptions === 'function' ? getProductOptions() : ''}
             </select>
+          </div>
+          <div class="field-group field-group-full pr-product-rename-box">
+            <label>แก้ไขชื่อสินค้า</label>
+            <div class="pr-product-rename-row">
+              <input id="add-data-product-rename-new" type="text" placeholder="ชื่อสินค้าใหม่" />
+              <label class="pr-product-rename-history pr-location-check">
+                <input id="add-data-product-rename-history" type="checkbox" />
+                <span class="pr-location-check-box pr-rename-check-box" aria-hidden="true"></span>
+                <span class="pr-location-check-text">แก้ประวัติย้อนหลัง</span>
+              </label>
+              <button class="btn-add-row" type="button" onclick="renameAddDataProduct(this)">บันทึกชื่อใหม่</button>
+            </div>
+            <small class="pr-product-rename-hint">เลือกสินค้าเดิมจาก Dropdown ก่อน แล้วกรอกชื่อใหม่เพื่อเปลี่ยนชื่อในระบบ</small>
           </div>
           <div class="field-group field-group-full">
             <label>Location</label>
@@ -3253,7 +3294,42 @@ function renderAddDataPanel() {
   enhanceAddDataLocationChecks();
   enhanceAddDataStockQtyInputs();
   enhanceAddDataCostInputs();
+  enhanceAddDataAddressCounters();
+  enhanceAddDataRenameHistoryCheck();
   bindAddDataProductDetailEvents(productSelect);
+}
+
+function enhanceAddDataRenameHistoryCheck() {
+  const input = document.getElementById('add-data-product-rename-history');
+  if (!input) return;
+
+  const label = input.closest('.pr-product-rename-history');
+  const syncCheckedState = () => {
+    label?.classList.toggle('is-checked', input.checked);
+  };
+
+  input.addEventListener('change', syncCheckedState);
+  syncCheckedState();
+}
+
+function refreshAddDataAddressCounter(input) {
+  if (!input) return;
+  const counterId = input.dataset.addDataAddressCounter || '';
+  const counter = counterId ? document.getElementById(counterId) : null;
+  if (!counter) return;
+
+  const maxLength = Number(input.maxLength || ADD_DATA_VENDOR_ADDRESS_MAX_LENGTH);
+  const usedLength = Array.from(String(input.value || '')).length;
+  const remaining = Math.max(0, maxLength - usedLength);
+  counter.textContent = `เหลือ ${remaining} ตัวอักษร`;
+  counter.classList.toggle('is-warning', remaining <= 8);
+}
+
+function enhanceAddDataAddressCounters() {
+  document.querySelectorAll('[data-add-data-address-counter]').forEach((input) => {
+    input.addEventListener('input', () => refreshAddDataAddressCounter(input));
+    refreshAddDataAddressCounter(input);
+  });
 }
 
 function enhanceAddDataLocationChecks() {
@@ -3513,31 +3589,7 @@ function getAddDataProductTypeKey(value) {
 }
 
 function getAddDataKnownProductTypes() {
-  const productTypes = [];
-  const seen = new Set();
-  const addType = (value) => {
-    const productType = String(value || '').trim();
-    const key = getAddDataProductTypeKey(productType);
-    if (!productType || seen.has(key)) return;
-    seen.add(key);
-    productTypes.push(productType);
-  };
-
-  if (typeof localStockTypes !== 'undefined') {
-    Object.values(localStockTypes || {}).forEach((centerTypes) => {
-      Object.values(centerTypes || {}).forEach(addType);
-    });
-  }
-
-  prProductTypeMap.forEach(addType);
-
-  return productTypes;
-}
-
-function getAddDataProductTypeOptions() {
-  return getAddDataKnownProductTypes()
-    .map((productType) => `<option value="${escapeHtml(productType)}">${escapeHtml(productType)}</option>`)
-    .join('');
+  return [];
 }
 
 async function loadAddDataProductTypeSelect(select) {
@@ -3553,8 +3605,6 @@ async function loadAddDataProductTypeSelect(select) {
     seen.add(key);
     productTypes.push(productType);
   };
-
-  getAddDataKnownProductTypes().forEach(addType);
 
   if (typeof supabaseClient !== 'undefined') {
     try {
@@ -3637,7 +3687,7 @@ function enhanceAddDataProductTypeSelect(select) {
     },
   });
 
-  ts.wrapper.classList.add('stock-product-filter-select', 'add-data-product-type-filter-select');
+  ts.wrapper.classList.add('stock-product-filter-select', 'add-data-vendor-filter-select', 'add-data-product-type-filter-select');
   ts.control_input.setAttribute('placeholder', 'พิมพ์หรือเลือก Product type');
 }
 
@@ -3696,6 +3746,9 @@ function setAddDataFieldValue(id, value) {
   }
 
   input.value = nextValue;
+  if (input.dataset.addDataAddressCounter) {
+    refreshAddDataAddressCounter(input);
+  }
 }
 
 function resetAddDataForm() {
@@ -4025,6 +4078,95 @@ async function handleAddDataProductSelection(product) {
   setAddDataLocationChecks(stockLocations);
   setAddDataStockQtyInputs(stockQtyMap);
   updateAddDataCostQtyFromSelectedStock();
+}
+
+async function renameAddDataProduct(button) {
+  if (typeof supabaseClient === 'undefined') {
+    showToast('ไม่พบการเชื่อมต่อ Supabase', 'error');
+    return;
+  }
+
+  const productSelect = document.getElementById('add-data-product-select');
+  const oldProduct = String(productSelect?.value || '').trim();
+  const newProduct = String(document.getElementById('add-data-product-rename-new')?.value || '').trim();
+  const updateHistory = Boolean(document.getElementById('add-data-product-rename-history')?.checked);
+
+  if (!oldProduct) {
+    showToast('กรุณาเลือกสินค้าเดิมจาก Dropdown ก่อน', 'error');
+    return;
+  }
+
+  if (!newProduct) {
+    showToast('กรุณากรอกชื่อสินค้าใหม่', 'error');
+    return;
+  }
+
+  if (getAddDataProductKey(oldProduct) === getAddDataProductKey(newProduct)) {
+    showToast('ชื่อสินค้าเดิมและชื่อใหม่เหมือนกัน', 'error');
+    return;
+  }
+
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
+
+  showToast('', 'loading', 'กำลังเปลี่ยนชื่อสินค้า...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('rename_stock_product', {
+      p_old_product: oldProduct,
+      p_new_product: newProduct,
+      p_update_history: updateHistory,
+      p_changed_by_code: currentUser?.code || '',
+      p_changed_by_name: currentUser?.name || currentUser?.code || '',
+      p_note: updateHistory
+        ? 'เปลี่ยนชื่อสินค้าและแก้ประวัติย้อนหลังจากหน้า Add Data'
+        : 'เปลี่ยนชื่อสินค้าจากหน้า Add Data',
+    });
+
+    if (error) throw error;
+    if (!data || data.success !== true) {
+      throw new Error(data?.message || 'เปลี่ยนชื่อสินค้าไม่สำเร็จ');
+    }
+
+    showToast(data.message || 'เปลี่ยนชื่อสินค้าเรียบร้อย', 'success');
+
+    document.getElementById('add-data-product-rename-new').value = '';
+    const historyInput = document.getElementById('add-data-product-rename-history');
+    if (historyInput) historyInput.checked = false;
+
+    prVendorProductCompanyLoaded = false;
+    prVendorProductCompanyMap = new Map();
+    prProductTypeLoaded = false;
+    prProductTypeMap = new Map();
+
+    if (typeof fetchStock === 'function') {
+      await fetchStock();
+    }
+
+    if (productSelect?.tomselect) {
+      productSelect.tomselect.removeOption(oldProduct);
+      productSelect.tomselect.addOption({ value: newProduct, text: newProduct });
+      productSelect.tomselect.refreshOptions(false);
+      productSelect.tomselect.setValue(newProduct, true);
+      productSelect.value = newProduct;
+    } else if (productSelect) {
+      const option = Array.from(productSelect.options).find((item) => item.value === oldProduct);
+      if (option) {
+        option.value = newProduct;
+        option.textContent = newProduct;
+      } else {
+        productSelect.add(new Option(newProduct, newProduct));
+      }
+      productSelect.value = newProduct;
+    }
+
+    await handleAddDataProductSelection(newProduct);
+  } catch (error) {
+    console.error('rename_stock_product error:', error);
+    showToast(`เปลี่ยนชื่อสินค้าไม่สำเร็จ: ${error.message || error}`, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function saveAddDataVendorProduct(button) {

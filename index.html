@@ -10,7 +10,7 @@
   <link rel="icon" href="data:,">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=20260609-add-data-rpc-stock2">
+<link rel="stylesheet" href="css/style.css?v=20260626-product-rename12">
 </head>
 <body>
   <section class="login-screen" id="login-screen">
@@ -22,15 +22,15 @@
 
       <div class="login-form">
         <label for="login-code">รหัสเจ้าหน้าที่</label>
-        <input type="text" id="login-code" placeholder="เช่น staff1, staff2, staff3" autocomplete="username" />
+        <input type="text" id="login-code" placeholder="เช่น staff1, staff2, staff3" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
 
         <label for="login-password">รหัสผ่าน</label>
         <div class="password-field">
-          <input type="password" id="login-password" placeholder="กรอกรหัสผ่าน" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" />
+          <input type="password" id="login-password" placeholder="กรอกรหัสผ่าน" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" />
           <button class="btn-toggle-password" id="toggle-password" type="button" aria-label="แสดงรหัสผ่าน">แสดง</button>
         </div>
 
-        <button class="btn-login" id="btn-login" type="button" onclick="login()">เข้าสู่ระบบ</button>
+        <button class="btn-login" id="btn-login" type="button">เข้าสู่ระบบ</button>
       </div>
     </div>
   </section>
@@ -486,9 +486,6 @@
             <label for="stock-product-type-filter">ประเภทสินค้า</label>
             <select id="stock-product-type-filter">
               <option value="">ทุกประเภท</option>
-              <option value="คุรุภัณฑ์">คุรุภัณฑ์</option>
-              <option value="วัสดุการแพทย์">วัสดุการแพทย์</option>
-              <option value="น้ำยาฟอกไต">น้ำยาฟอกไต</option>
             </select>
           </div>
 
@@ -598,14 +595,14 @@
 
 <script src="js/utils.js?v=20260606-pr-table-split1" defer></script>
 <script src="js/supabase.js?v=20260514-deploy1" defer></script>
-<script src="js/auth.js?v=20260606-pr-user-pages1" defer></script>
+<script src="js/auth.js?v=20260626-login-clear2" defer></script>
 <script src="js/db.js?v=20260607-stock-normalize-merge1" defer></script>
 <script src="js/stock.js?v=20260605-open-pr-label1" defer></script>
 <script src="js/transfer.js?v=20260608-lot-vendor-snapshot1" defer></script>
-<script src="js/po.js?v=20260609-add-data-rpc-stock2" defer></script>
+<script src="js/po.js?v=20260626-po-received-row1" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="js/export.js" defer></script>
+<script src="js/export.js?v=20260626-login-clear2" defer></script>
 <script src="js/ui.js?v=20260607-add-data-dropdown-clear1" defer></script>
-<script src="js/app.js?v=20260530-android-dropdown1" defer></script>
+<script src="js/app.js?v=20260626-login-clear2" defer></script>
 </body>
 </html>
