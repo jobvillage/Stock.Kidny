@@ -15,7 +15,7 @@ const ROLE_PERMISSIONS = {
   admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary', 'committee'],
   adminR: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary'],
 
-  pr_approver: ['pr_approval', 'stock'],
+  pr_approver: ['pr_approval', 'stock', 'pr_export_data'],
   pr_po_manager: ['pr_approved', 'pr_open_po', 'stock', 'pr_add_data', 'pr_export_data'],
 };
 
@@ -391,7 +391,7 @@ function applyRoleTabOrder() {
     admin: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary', 'committee'],
     adminR: ['in', 'pending', 'transfer', 'po_status', 'stock', 'withdraw_summary'],
     stock_receiver: ['in', 'pending', 'po_status', 'stock'],
-    pr_approver: ['pr_approval', 'stock'],
+    pr_approver: ['pr_approval', 'stock', 'pr_export_data'],
   };
   const order = orderByRole[currentUser?.role] || currentUser?.permissions || [];
 

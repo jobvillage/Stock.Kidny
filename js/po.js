@@ -104,17 +104,20 @@ function isPrPoManagerUser() {
 
 function setupPrPoWorkspaceForSpecialUsers() {
   if (isPrApprovalUser()) {
-    currentUser.permissions = ['pr_approval', 'stock'];
-    setPrModeLabel('pr_approval', 'อนุมัติ PR');
-    renderPrNav([
-      { tab: 'pr_approval', icon: '✅', label: 'อนุมัติ PR' },
-      { tab: 'stock', icon: '📦', label: 'Stock' },
-    ]);
-    renderPrApprovalPanels();
-    bindPrWorkspaceTabs();
-    fetchPrApprovalRecords();
-    return true;
-  }
+      currentUser.permissions = ['pr_approval', 'stock', 'pr_export_data'];
+      setPrModeLabel('pr_approval', 'อนุมัติ PR');
+      setPrModeLabel('pr_export_data', 'Export Data');
+      renderPrNav([
+        { tab: 'pr_approval', icon: '✅', label: 'อนุมัติ PR' },
+        { tab: 'stock', icon: '📦', label: 'Stock' },
+        { tab: 'pr_export_data', icon: '📤', label: 'Export Data' },
+      ]);
+      renderPrApprovalPanels();
+      renderExportDataPanel();
+      bindPrWorkspaceTabs();
+      fetchPrApprovalRecords();
+      return true;
+    }
 
   if (isPrPoManagerUser()) {
     currentUser.permissions = ['pr_approved', 'pr_open_po', 'stock', 'pr_add_data', 'pr_export_data'];
