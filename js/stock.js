@@ -827,7 +827,7 @@ function printStockView() {
       <style>
         body {
           margin: 24px;
-          color: #111827;
+          color: #000;
           font-family: Arial, sans-serif;
         }
         h1 {
@@ -836,7 +836,7 @@ function printStockView() {
         }
         .print-meta {
           margin-bottom: 16px;
-          color: #64748b;
+          color: #000;
           font-size: 13px;
         }
         .products-header,
@@ -882,7 +882,7 @@ function printStockView() {
         }
         .stock-col-order {
           white-space: normal !important;
-          color: #b45309;
+          color: #000 !important;
         }
       </style>
     </head>

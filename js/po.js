@@ -1,6 +1,7 @@
 const PR_APPROVER_CODES = ['user1', 'user2'];
 const PR_PO_MANAGER_CODES = ['user3', 'user4'];
 const ADD_DATA_VENDOR_ADDRESS_MAX_LENGTH = 64;
+const PR_APPROVED_EMAIL_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby6HftKeGFb0nrEYydWwH4Ps98patvyHfmGX0q1v5acpKSeqiuW9e5p_RIg0Qucz0K5rw/exec';
 const PR_APPROVER_BY_CODE = {
   user1: 'daeng',
   user2: 'toy',
@@ -480,6 +481,8 @@ function normalizePrOpenedPoRecord(raw = {}) {
     center: raw.center || raw.stock_center || '',
     status: raw.status || '',
     note: raw.note || '',
+    po_print_doc_no: raw.po_print_doc_no || raw.poPrintDocNo || raw.print_doc_no || raw.printDocNo || '',
+    poPrintDocNo: raw.poPrintDocNo || raw.po_print_doc_no || raw.print_doc_no || raw.printDocNo || '',
     pr_id: getPrIdFromPoRecord(raw),
     received_items: normalizeItems(raw.received_items || raw.receivedItems),
     items: normalizeItems(raw.items).map((item) => ({
@@ -744,6 +747,44 @@ function renderPrApproverButton(record, approver, label) {
   `;
 }
 
+function getPrApprovedEmailWebAppUrl() {
+  return String(PR_APPROVED_EMAIL_WEB_APP_URL || '').trim();
+}
+
+function buildPrApprovedEmailPayload(record = {}) {
+  return {
+    pr_id: record.po_id || record.pr_id || '',
+    pr_date: record.po_date || record.pr_date || '',
+    pr_person: record.po_person || record.pr_person || '',
+    center: record.center || '',
+    note: record.note || '',
+    status: 'pr_approved',
+    sent_by_code: currentUser?.code || '',
+    sent_by_name: currentUser?.name || currentUser?.code || '',
+    items: Array.isArray(record.items) ? record.items : [],
+  };
+}
+
+async function sendPrApprovedEmail(record = {}) {
+  const url = getPrApprovedEmailWebAppUrl();
+
+  if (!url) {
+    console.warn('PR approved email web app URL is not configured.');
+    return false;
+  }
+
+  await fetch(url, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    body: JSON.stringify(buildPrApprovedEmailPayload(record)),
+  });
+
+  return true;
+}
+
 async function approvePrRequest(poId, approver, button) {
   if (!poId || !approver) return;
 
@@ -781,6 +822,19 @@ async function approvePrRequest(poId, approver, button) {
     }
 
     showToast(`✅ ${data.message || 'บันทึกการอนุมัติแล้ว'}`, 'success');
+    if (data.complete === true && !alreadyApproved) {
+      try {
+        await sendPrApprovedEmail({
+          ...(record || {}),
+          po_id: poId,
+          pr_id: poId,
+          status: 'pr_approved',
+        });
+      } catch (emailError) {
+        console.warn('sendPrApprovedEmail failed:', emailError);
+      }
+    }
+
     await fetchPrApprovalRecords();
 
   } catch (error) {
@@ -1447,6 +1501,18 @@ function getPrPoPrintCompanyInfo(center = '') {
   };
 }
 
+function getPoPrintDocNoFromRecord(po = {}) {
+  return po.po_print_doc_no || po.poPrintDocNo || po.print_doc_no || po.printDocNo || '';
+}
+
+async function ensureOpenedPoPrintDocNo(po = {}) {
+  const existingDocNo = getPoPrintDocNoFromRecord(po);
+  if (existingDocNo) return existingDocNo;
+
+  const poId = String(po.po_id || '').trim();
+  return poId;
+}
+
 async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
   const po = prOpenedPoRecords.find((item) => item.po_id === poId);
 
@@ -1456,6 +1522,7 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
     return;
   }
 
+  const printDocNo = await ensureOpenedPoPrintDocNo(po);
   const items = (po.items || []).filter((item) => !item._deleted);
   const firstProduct = items.find((item) => item.product)?.product || '';
   let vendorMeta = null;
@@ -1474,12 +1541,18 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
     : '<span>-</span>';
   const vendorPhone = vendorMeta?.phone || '';
   const vendorEmail = vendorMeta?.email || '';
+  const vendorContactName = vendorMeta?.contactName || po.po_person || '-';
+  const vendorCreditTerms = vendorMeta?.creditTerms || '90 วัน';
   const company = getPrPoPrintCompanyInfo(po.center || '');
   const grandTotal = items.reduce((sum, item) => sum + getPrPoPrintLineTotal(item), 0);
   const discount = 0;
   const afterDiscount = grandTotal / 1.07;
   const subtotal = afterDiscount + discount;
   const vat = grandTotal - afterDiscount;
+  const printNote = [
+    po.po_id ? `เลข PO ระบบ: ${po.po_id}` : '',
+    po.note || '',
+  ].filter(Boolean).join(' / ');
 
   // จากการวัดจริง: ลด 3 แถวเพื่อไม่ให้ล้น A4
   const ROW_HEIGHT = 24;
@@ -1514,13 +1587,20 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>ใบสั่งซื้อ ${escapeHtml(po.po_id || '')}</title>
+      <title>ใบสั่งซื้อ ${escapeHtml(printDocNo || '')}</title>
       <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+          color: #000 !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
         body {
           font-family: 'Sarabun', 'Tahoma', sans-serif;
           font-size: 13px;
-          color: #333;
+          color: #000;
           line-height: 1.5;
           background: #e0e0e0;
         }
@@ -1535,7 +1615,7 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
           box-shadow: 0 2px 12px rgba(0,0,0,0.18);
         }
         .header { text-align: center; margin-bottom: 6px; }
-        .company-name { font-size: 18px; font-weight: bold; color: #008000; }
+        .company-name { font-size: 18px; font-weight: 900; color: #000 !important; }
         .header div { font-size: 12px; }
         .title-section { position: relative; text-align: center; margin: 8px 0 6px; min-height: 44px; }
         .doc-title { font-size: 20px; font-weight: bold; text-decoration: underline; display: inline-block; }
@@ -1577,7 +1657,13 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
             size: A4;
             margin: 0; /* ลบขอบกระดาษและหัวกระดาษเริ่มต้นของ Browser */
           }
-          body { background: none; }
+          html,
+          body {
+            background: none;
+            color: #000 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
           .page {
             margin: 0;
             box-shadow: none;
@@ -1608,7 +1694,7 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
         <div class="title-section">
           <div class="doc-title">${escapeHtml(company.documentTitle || 'ใบสั่งซื้อ')}</div>
           <div class="doc-info">
-            <div><strong>เลขที่เอกสาร</strong> ${escapeHtml(po.po_id || '-')}</div>
+            <div><strong>เลขที่เอกสาร</strong> ${escapeHtml(printDocNo || '-')}</div>
             <div><strong>วันที่เอกสาร</strong> ${escapeHtml(formatPrPoPrintDate(po.po_date))}</div>
           </div>
         </div>
@@ -1620,9 +1706,9 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
             <strong>โทร.</strong> ${escapeHtml(vendorPhone || '-')} &nbsp;<strong>E-mail:</strong> ${escapeHtml(vendorEmail || '-')}
           </div>
           <div class="info-box-right">
-            <strong>ผู้ติดต่อ :</strong> ${escapeHtml(po.po_person || '-')}<br>
+            <strong>ผู้ติดต่อ :</strong> ${escapeHtml(vendorContactName)}<br>
             <strong>วันที่ส่งของ :</strong><br>
-            <strong>เครดิต :</strong> 90 วัน<br>
+            <strong>เครดิต :</strong> ${escapeHtml(vendorCreditTerms)}<br>
             <strong>อ้างอิง PR :</strong> ${escapeHtml(po.pr_id || '-')}
           </div>
         </div>
@@ -1650,7 +1736,7 @@ async function printOpenedPoDocument(poId, reservedPrintWindow = null) {
         <table class="footer-top-table">
           <tr>
             <td style="width:65%;" rowspan="5" class="left-align">
-              <strong>หมายเหตุ</strong><br>${escapeHtml(po.note || '')}
+              <strong>หมายเหตุ</strong><br>${escapeHtml(printNote)}
             </td>
             <td style="width:20%;" class="left-align">รวมเงิน</td>
             <td style="width:15%;" class="right-align">${formatPrPoPrintMoney(subtotal)}</td>
@@ -1955,11 +2041,12 @@ function renderPrOpenedPoCard(po) {
         .map(({ item, index, isNew }, visibleIndex, visibleRows) => renderPrOpenedPoEditRow(po, item, index, isNew, visibleIndex, visibleRows.length))
         .join('')
     : visibleItems.map((item, index) => `
-      <div class="pr-item-row ${isPrOpenedPoItemReceived(po, item, index) ? 'is-received-complete' : ''}">
+      <div class="pr-item-row pr-opened-po-item-row ${isPrOpenedPoItemReceived(po, item, index) ? 'is-received-complete' : ''}">
         <strong>${escapeHtml(item.product || '-')}</strong>
         <span>${Number(item.qty || 0).toLocaleString()}</span>
         <span>${escapeHtml(item.unit || '-')}</span>
         <small>${escapeHtml(getPrCompanyNameForProduct(item.product))}</small>
+        <span class="pr-opened-po-received-status">${renderPrOpenedPoReceivedLabel(po, item, index)}</span>
       </div>
     `).join('');
 
@@ -1990,6 +2077,7 @@ function renderPrOpenedPoCard(po) {
         <div><span>ผู้เปิด PO</span><strong>${escapeHtml(po.po_person || '-')}</strong></div>
         <div><span>ศูนย์รับเข้า</span><strong>${escapeHtml(po.center || '-')}</strong></div>
       </div>
+      ${isEditing ? '' : '<div class="pr-opened-po-table-scroll">'}
       ${isEditing ? `
         <div class="pr-opened-po-edit-head">
           <span></span>
@@ -2001,16 +2089,18 @@ function renderPrOpenedPoCard(po) {
           <span></span>
         </div>
       ` : `
-        <div class="pr-item-head">
+        <div class="pr-item-head pr-opened-po-item-head">
           <span>สินค้า</span>
           <span>จำนวน</span>
           <span>หน่วย</span>
           <span>บริษัท</span>
+          <span>สถานะรับเข้า</span>
         </div>
       `}
-      <div class="pr-placeholder-list">
+      <div class="pr-placeholder-list pr-opened-po-placeholder-list">
         ${itemRows || '<div class="empty-state">ไม่มีรายการสินค้า</div>'}
       </div>
+      ${isEditing ? '' : '</div>'}
       ${isEditing ? `
         <div class="pr-opened-po-edit-actions">
           <button class="btn-secondary pr-opened-po-add-row" type="button" data-add-opened-po-edit-row="${escapeHtml(po.po_id || '')}">
@@ -2060,18 +2150,136 @@ function getPrOpenedPoReceivedMaps(po = {}) {
   return { receivedByLine, receivedByProduct };
 }
 
-function isPrOpenedPoItemReceived(po = {}, item = {}, index = 0) {
-  if (String(po.status || '').toLowerCase() === 'received') return true;
+function getPrOpenedPoLineReceivedStates(po = {}) {
+  const requestedItems = (po.items || []).filter((item) => !item._deleted);
+  const receivedItems = normalizeItems(po.received_items || po.receivedItems);
+  const states = requestedItems.map((item, index) => ({
+    ...item,
+    lineIndex: index,
+    product: String(item.product || item.name || '').trim(),
+    requestedQty: Number(item.qty || item.quantity || 0) || 0,
+    receivedQty: 0,
+    remainingQty: Number(item.qty || item.quantity || 0) || 0,
+  }));
 
-  const orderedQty = Number(item.qty || item.quantity || 0) || 0;
+  const addReceivedToLine = (lineIndex, qty, allowOverReceived = false) => {
+    const state = states[lineIndex];
+    if (!state || qty <= 0) return qty;
+
+    const remaining = Math.max(0, state.requestedQty - state.receivedQty);
+    const usedQty = allowOverReceived ? qty : Math.min(remaining, qty);
+    state.receivedQty += usedQty;
+    state.remainingQty = Math.max(0, state.requestedQty - state.receivedQty);
+
+    return qty - usedQty;
+  };
+
+  const pendingReceived = [];
+
+  receivedItems.forEach((received) => {
+    const product = String(received.product || received.name || '').trim();
+    const qty = Number(
+      received.qty
+      ?? received.quantity
+      ?? received.received_qty
+      ?? received.receivedQty
+      ?? received.receive_qty
+      ?? received.receiveQty
+      ?? 0
+    ) || 0;
+    if (!product || qty <= 0) return;
+
+    const lineIndexValue = received.line_index ?? received.lineIndex ?? received.po_line_index ?? received.poLineIndex;
+    const lineIndex = lineIndexValue === undefined || lineIndexValue === null || lineIndexValue === ''
+      ? -1
+      : Number(lineIndexValue);
+
+    if (Number.isInteger(lineIndex) && states[lineIndex]?.product === product) {
+      const overflowQty = addReceivedToLine(lineIndex, qty, true);
+      if (overflowQty > 0) pendingReceived.push({ product, qty: overflowQty });
+      return;
+    }
+
+    pendingReceived.push({ product, qty });
+  });
+
+  pendingReceived.forEach((received) => {
+    let remainingQty = received.qty;
+
+    const exactLine = states.findIndex((state) => (
+      state.product === received.product
+      && state.remainingQty > 0
+      && state.remainingQty === remainingQty
+    ));
+
+    if (exactLine >= 0) {
+      remainingQty = addReceivedToLine(exactLine, remainingQty);
+    }
+
+    states.forEach((state, index) => {
+      if (remainingQty <= 0 || state.product !== received.product || state.remainingQty <= 0) return;
+      remainingQty = addReceivedToLine(index, remainingQty);
+    });
+  });
+
+  if (String(po.status || '').toLowerCase() === 'received') {
+    states.forEach((state) => {
+      if (state.requestedQty > 0 && state.receivedQty <= 0) {
+        state.receivedQty = state.requestedQty;
+        state.remainingQty = 0;
+      }
+    });
+  }
+
+  return states;
+}
+
+function getPrOpenedPoLineReceivedState(po = {}, item = {}, index = 0) {
+  const states = getPrOpenedPoLineReceivedStates(po);
+  const directState = states[index];
+  if (directState) return directState;
+
+  const product = String(item.product || item.name || '').trim();
+  return states.find((state) => state.product === product) || {
+    requestedQty: Number(item.qty || item.quantity || 0) || 0,
+    receivedQty: 0,
+    remainingQty: Number(item.qty || item.quantity || 0) || 0,
+  };
+}
+
+function formatPrOpenedPoQty(value) {
+  return Number(value || 0).toLocaleString('th-TH', {
+    maximumFractionDigits: 3,
+  });
+}
+
+function renderPrOpenedPoReceivedLabel(po = {}, item = {}, index = 0) {
+  const state = getPrOpenedPoLineReceivedState(po, item, index);
+  const orderedQty = Number(state.requestedQty ?? item.qty ?? item.quantity ?? 0) || 0;
+  const receivedQty = Number(state.receivedQty) || 0;
+  const remainingQty = Number(state.remainingQty ?? Math.max(0, orderedQty - receivedQty)) || 0;
+
+  if (orderedQty <= 0) {
+    return '<small class="po-received-label is-cancelled">ยกเลิกรายการ</small>';
+  }
+
+  if (receivedQty >= orderedQty) {
+    return `<small class="po-received-label is-complete">รับเข้าแล้วครบ ${formatPrOpenedPoQty(receivedQty)}/${formatPrOpenedPoQty(orderedQty)}</small>`;
+  }
+
+  if (receivedQty > 0 && remainingQty > 0) {
+    return `<small class="po-received-label is-partial">รับเข้าแล้ว ${formatPrOpenedPoQty(receivedQty)}/${formatPrOpenedPoQty(orderedQty)}</small>`;
+  }
+
+  return '<small class="po-received-label is-waiting">ยังไม่รับเข้า</small>';
+}
+
+function isPrOpenedPoItemReceived(po = {}, item = {}, index = 0) {
+  const state = getPrOpenedPoLineReceivedState(po, item, index);
+  const orderedQty = Number(state.requestedQty ?? item.qty ?? item.quantity ?? 0) || 0;
   if (orderedQty <= 0) return true;
 
-  const { receivedByLine, receivedByProduct } = getPrOpenedPoReceivedMaps(po);
-  const product = String(item.product || item.name || '').trim();
-  const productKey = getPrOpenPoProductKey(product);
-  const receivedQty = receivedByLine.has(index)
-    ? receivedByLine.get(index)
-    : (receivedByProduct.get(productKey) || 0);
+  const receivedQty = Number(state.receivedQty) || 0;
 
   return receivedQty >= orderedQty;
 }
@@ -3166,6 +3374,14 @@ function renderAddDataPanel() {
               <input id="add-data-vendor-phone" type="tel" placeholder="เบอร์โทร" />
             </div>
             <div class="field-group">
+              <label>ผู้ติดต่อ</label>
+              <input id="add-data-vendor-contact" type="text" placeholder="ชื่อผู้ติดต่อ" />
+            </div>
+            <div class="field-group">
+              <label>เครดิต</label>
+              <input id="add-data-vendor-credit" type="text" placeholder="เช่น 90 วัน" />
+            </div>
+            <div class="field-group">
               <label>E-mail</label>
               <input id="add-data-vendor-email" type="email" placeholder="email@example.com" />
             </div>
@@ -3472,7 +3688,7 @@ async function loadAddDataVendorSelect(select) {
   try {
     const { data, error } = await supabaseClient
       .from('vendors')
-      .select('vendor_name, address_1, address_2, phone, email, is_active')
+      .select('vendor_name, address_1, address_2, phone, contact_name, credit_terms, email, is_active')
       .eq('is_active', true)
       .order('vendor_name', { ascending: true });
 
@@ -3485,6 +3701,8 @@ async function loadAddDataVendorSelect(select) {
         address1: vendor.address_1 || '',
         address2: vendor.address_2 || '',
         phone: vendor.phone || '',
+        contactName: vendor.contact_name || '',
+        creditTerms: vendor.credit_terms || '',
         email: vendor.email || '',
       }))
       .filter((vendor) => vendor.name);
@@ -3563,6 +3781,8 @@ function handleAddDataVendorSelection(vendorName) {
     setAddDataFieldValue('add-data-vendor-address-1', '');
     setAddDataFieldValue('add-data-vendor-address-2', '');
     setAddDataFieldValue('add-data-vendor-phone', '');
+    setAddDataFieldValue('add-data-vendor-contact', '');
+    setAddDataFieldValue('add-data-vendor-credit', '');
     setAddDataFieldValue('add-data-vendor-email', '');
     return;
   }
@@ -3572,6 +3792,8 @@ function handleAddDataVendorSelection(vendorName) {
     setAddDataFieldValue('add-data-vendor-address-1', '');
     setAddDataFieldValue('add-data-vendor-address-2', '');
     setAddDataFieldValue('add-data-vendor-phone', '');
+    setAddDataFieldValue('add-data-vendor-contact', '');
+    setAddDataFieldValue('add-data-vendor-credit', '');
     setAddDataFieldValue('add-data-vendor-email', '');
     return;
   }
@@ -3579,6 +3801,8 @@ function handleAddDataVendorSelection(vendorName) {
   setAddDataFieldValue('add-data-vendor-address-1', vendor.address1 || '');
   setAddDataFieldValue('add-data-vendor-address-2', vendor.address2 || '');
   setAddDataFieldValue('add-data-vendor-phone', vendor.phone || '');
+  setAddDataFieldValue('add-data-vendor-contact', vendor.contactName || '');
+  setAddDataFieldValue('add-data-vendor-credit', vendor.creditTerms || '');
   setAddDataFieldValue('add-data-vendor-email', vendor.email || '');
 }
 
@@ -3762,6 +3986,8 @@ function resetAddDataForm() {
     'add-data-vendor-address-1',
     'add-data-vendor-address-2',
     'add-data-vendor-phone',
+    'add-data-vendor-contact',
+    'add-data-vendor-credit',
     'add-data-vendor-email',
     'add-data-product-name',
     'add-data-product-type',
@@ -3956,7 +4182,7 @@ async function fetchAddDataProductVendorMeta(product) {
   try {
     const { data, error } = await supabaseClient
       .from('vendor_products')
-      .select('unit, product_type, default_location, cost_qty, cost_unit_qty, cost_unit_price, cost_total_price, cost_unit, updated_at, vendors(vendor_name, address_1, address_2, phone, email)')
+      .select('unit, product_type, default_location, cost_qty, cost_unit_qty, cost_unit_price, cost_total_price, cost_unit, updated_at, vendors(vendor_name, address_1, address_2, phone, contact_name, credit_terms, email)')
       .eq('product', product)
       .eq('is_active', true)
       .order('updated_at', { ascending: false })
@@ -3981,6 +4207,8 @@ async function fetchAddDataProductVendorMeta(product) {
       address1: vendor?.address_1 || '',
       address2: vendor?.address_2 || '',
       phone: vendor?.phone || '',
+      contactName: vendor?.contact_name || '',
+      creditTerms: vendor?.credit_terms || '',
       email: vendor?.email || '',
       unit: row.unit || '',
       productType: row.product_type || '',
@@ -4015,6 +4243,8 @@ function clearAddDataProductDetails() {
     'add-data-vendor-address-1',
     'add-data-vendor-address-2',
     'add-data-vendor-phone',
+    'add-data-vendor-contact',
+    'add-data-vendor-credit',
     'add-data-vendor-email',
     'add-data-product-name',
     'add-data-product-type',
@@ -4067,6 +4297,8 @@ async function handleAddDataProductSelection(product) {
   setAddDataFieldValue('add-data-vendor-address-1', meta?.address1 || '');
   setAddDataFieldValue('add-data-vendor-address-2', meta?.address2 || '');
   setAddDataFieldValue('add-data-vendor-phone', meta?.phone || '');
+  setAddDataFieldValue('add-data-vendor-contact', meta?.contactName || '');
+  setAddDataFieldValue('add-data-vendor-credit', meta?.creditTerms || '');
   setAddDataFieldValue('add-data-vendor-email', meta?.email || '');
   setAddDataFieldValue('add-data-product-type', productType);
   setAddDataFieldValue('add-data-product-unit', meta?.unit || stockUnit);
@@ -4235,6 +4467,8 @@ async function saveAddDataVendorProduct(button) {
       p_address_1: document.getElementById('add-data-vendor-address-1')?.value.trim() || '',
       p_address_2: document.getElementById('add-data-vendor-address-2')?.value.trim() || '',
       p_phone: document.getElementById('add-data-vendor-phone')?.value.trim() || '',
+      p_contact_name: document.getElementById('add-data-vendor-contact')?.value.trim() || '',
+      p_credit_terms: document.getElementById('add-data-vendor-credit')?.value.trim() || '',
       p_email: document.getElementById('add-data-vendor-email')?.value.trim() || '',
       p_product: product,
       p_unit: unit,
@@ -4254,7 +4488,15 @@ async function saveAddDataVendorProduct(button) {
     let { data, error } = await supabaseClient.rpc('save_vendor_product', saveParams);
 
     if (error && typeof isRpcSignatureError === 'function' && isRpcSignatureError(error)) {
-      const { p_product_type, ...paramsWithoutProductType } = saveParams;
+      const { p_contact_name, p_credit_terms, ...paramsWithoutVendorExtra } = saveParams;
+      const retryWithLegacyVendor = await supabaseClient.rpc('save_vendor_product', paramsWithoutVendorExtra);
+      data = retryWithLegacyVendor.data;
+      error = retryWithLegacyVendor.error;
+    }
+
+    if (error && typeof isRpcSignatureError === 'function' && isRpcSignatureError(error)) {
+      const { p_contact_name, p_credit_terms, ...paramsWithoutVendorExtra } = saveParams;
+      const { p_product_type, ...paramsWithoutProductType } = paramsWithoutVendorExtra;
       const fallback = await supabaseClient.rpc('save_vendor_product', paramsWithoutProductType);
       data = fallback.data;
       error = fallback.error;

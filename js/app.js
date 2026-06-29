@@ -466,8 +466,11 @@ function bindPrintRecoveryEvents() {
 
 function preparePrintHtml(html) {
   const sourceHtml = String(html || '');
-  if (/window\.print\s*\(/i.test(sourceHtml)) {
-    return sourceHtml;
+  const printInkStyle = getPrintInkStyle();
+  const sourceWithPrintInk = injectPrintInkStyle(sourceHtml, printInkStyle);
+
+  if (/window\.print\s*\(/i.test(sourceWithPrintInk)) {
+    return sourceWithPrintInk;
   }
 
   const printScript = `
@@ -479,11 +482,60 @@ function preparePrintHtml(html) {
       </script>
   `;
 
-  if (/<\/body>/i.test(sourceHtml)) {
-    return sourceHtml.replace(/<\/body>/i, `${printScript}</body>`);
+  if (/<\/body>/i.test(sourceWithPrintInk)) {
+    return sourceWithPrintInk.replace(/<\/body>/i, `${printScript}</body>`);
   }
 
-  return `${sourceHtml}${printScript}`;
+  return `${sourceWithPrintInk}${printScript}`;
+}
+
+function getPrintInkStyle() {
+  return `
+    <style id="global-print-ink-style">
+      * {
+        color: #000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      html,
+      body {
+        color: #000 !important;
+      }
+
+      a,
+      strong,
+      span,
+      div,
+      p,
+      td,
+      th,
+      small,
+      h1,
+      h2,
+      h3,
+      h4 {
+        color: #000 !important;
+      }
+    </style>
+  `;
+}
+
+function injectPrintInkStyle(html, printInkStyle) {
+  const sourceHtml = String(html || '');
+  if (/id=["']global-print-ink-style["']/i.test(sourceHtml)) {
+    return sourceHtml;
+  }
+
+  if (/<\/head>/i.test(sourceHtml)) {
+    return sourceHtml.replace(/<\/head>/i, `${printInkStyle}</head>`);
+  }
+
+  if (/<body[^>]*>/i.test(sourceHtml)) {
+    return sourceHtml.replace(/<body[^>]*>/i, (match) => `${match}${printInkStyle}`);
+  }
+
+  return `${printInkStyle}${sourceHtml}`;
 }
 
 function extractManagedPrintParts(html) {
@@ -550,6 +602,13 @@ function openManagedPrintWindow(html, popupMessage = 'ไม่สามาร�
       }
 
       ${styles}
+
+      #managed-print-root,
+      #managed-print-root * {
+        color: #000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
     }
   `;
 

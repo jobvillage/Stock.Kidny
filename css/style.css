@@ -5699,6 +5699,54 @@ button {
   color: #be123c;
 }
 
+.pr-opened-po-item-head,
+.pr-opened-po-item-row {
+  grid-template-columns: minmax(180px, 1.6fr) 90px 90px minmax(130px, 0.8fr) minmax(150px, 1fr);
+}
+
+.pr-opened-po-received-status {
+  justify-self: center;
+  text-align: center;
+}
+
+.pr-opened-po-item-head span:last-child {
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .pr-opened-po-table-scroll {
+    margin-top: 14px;
+    border: 1px solid #e3e8ef;
+    border-radius: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pr-opened-po-item-head,
+  .pr-opened-po-item-row {
+    grid-template-columns: minmax(150px, 1.5fr) 76px 72px minmax(100px, 0.8fr) minmax(130px, 1fr);
+    min-width: 660px;
+  }
+
+  .pr-opened-po-table-scroll .pr-opened-po-item-head {
+    margin-top: 0;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .pr-opened-po-placeholder-list {
+    min-width: 660px;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0 0 16px 16px;
+  }
+
+  .pr-opened-po-received-status .po-received-label {
+    white-space: normal;
+  }
+}
+
 .po-item-row.is-received-complete,
 .pr-item-row.is-received-complete {
   opacity: 0.55;
