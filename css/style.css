@@ -1308,6 +1308,95 @@ button {
   text-align: right;
 }
 
+.pr-add-data-layout .pr-card-head > .btn-add-row {
+  display: none;
+}
+
+.pr-add-data-layout .pr-main-card {
+  position: relative;
+}
+
+.pr-add-data-edit-actions {
+  display: flex;
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 0;
+  z-index: 2;
+}
+
+.pr-add-data-edit-actions .btn-add-row {
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: #f3f7fb;
+  color: #42526b;
+  box-shadow: none;
+}
+
+.pr-add-data-edit-actions .btn-add-row.is-active {
+  color: #047857;
+  background: #dcfce7;
+  box-shadow: 0 10px 24px rgba(4, 120, 87, 0.12);
+}
+
+.pr-add-data-edit-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid #b7dcff;
+  border-radius: 14px;
+  background: #eef6ff;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.pr-add-data-edit-status::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.1);
+}
+
+.pr-add-data-edit-status.is-vendor {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #047857;
+}
+
+.pr-add-data-edit-status.is-product {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.field-group.is-edit-locked {
+  position: relative;
+}
+
+.field-group.is-edit-locked::after {
+  content: "ล็อกไว้ระหว่างแก้ไข";
+  display: block;
+  margin-top: 6px;
+  color: #047857;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.field-group.is-edit-locked select,
+.field-group.is-edit-locked .ts-wrapper {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
 .pr-add-data-actions {
   display: block;
   margin-top: 24px;
@@ -1342,11 +1431,27 @@ button {
   background: #f8fbff;
 }
 
+.pr-vendor-rename-box {
+  order: -1;
+  padding: 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 18px;
+  background: #f0fdf4;
+}
+
+.pr-vendor-rename-box input {
+  background: #ffffff;
+}
+
 .pr-product-rename-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(210px, 240px) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(210px, 240px);
   gap: 10px;
   align-items: center;
+}
+
+.pr-product-rename-row .btn-add-row {
+  display: none;
 }
 
 .pr-product-rename-history {
@@ -1411,6 +1516,17 @@ button {
 }
 
 @media (max-width: 760px) {
+  .pr-add-data-edit-actions {
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin: 12px 0 14px;
+  }
+
+  .pr-add-data-edit-actions .btn-add-row {
+    width: 100%;
+  }
+
   .pr-product-rename-row {
     grid-template-columns: 1fr;
   }
@@ -3135,6 +3251,11 @@ button {
 .transfer-history-type.is-stock-in {
   color: #2767b1;
   background: #eaf2ff;
+}
+
+.transfer-history-type.is-add-data {
+  color: #047857;
+  background: #dcfce7;
 }
 
 .transfer-history-type.is-stock-out {

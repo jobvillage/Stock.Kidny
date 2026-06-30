@@ -79,6 +79,10 @@ let prOpenPoSelectedPrId = '';
 let prOpenPoDocumentId = '';
 let prOpenedPoEditingId = '';
 let prOpenedPoEditExtraRows = {};
+let addDataEditMode = '';
+let addDataEditOriginalVendorName = '';
+let addDataEditOriginalVendorId = null;
+let addDataEditOriginalProductName = '';
 let prVendorProductCompanyMap = new Map();
 let prVendorProductCostMap = new Map();
 let prVendorProductCompanyLoaded = false;
@@ -3346,6 +3350,12 @@ function renderAddDataPanel() {
           <button class="btn-add-row" type="button">แก้ไข</button>
         </div>
 
+        <div class="pr-add-data-edit-actions">
+          <button class="btn-add-row" type="button" data-add-data-edit-mode="vendor">แก้ไขชื่อบริษัท</button>
+          <button class="btn-add-row" type="button" data-add-data-edit-mode="product">แก้ไขชื่อสินค้า</button>
+        </div>
+        <div class="pr-add-data-edit-status" id="add-data-edit-status" hidden></div>
+
         <div class="pr-add-data-section">
           <div class="pr-add-data-section-head">
             <h4>บริษัทผู้ขาย</h4>
@@ -3353,6 +3363,11 @@ function renderAddDataPanel() {
           </div>
 
           <div class="form-grid">
+            <div class="field-group field-group-full pr-vendor-rename-box" data-add-data-vendor-rename-box hidden>
+              <label>ชื่อบริษัทใหม่</label>
+              <input id="add-data-vendor-rename-new" type="text" placeholder="แก้ไขชื่อบริษัทที่เลือกไว้" />
+              <small class="pr-product-rename-hint">เลือกบริษัทเดิมจากช่องชื่อบริษัทก่อน แล้วกดโหมดแก้ไขชื่อบริษัทเพื่อพิมพ์ชื่อใหม่</small>
+            </div>
             <div class="field-group field-group-full">
               <label>ชื่อบริษัท</label>
               <select id="add-data-vendor-name">
@@ -3412,7 +3427,7 @@ function renderAddDataPanel() {
               ${typeof getProductOptions === 'function' ? getProductOptions() : ''}
             </select>
           </div>
-          <div class="field-group field-group-full pr-product-rename-box">
+          <div class="field-group field-group-full pr-product-rename-box" data-add-data-product-rename-box hidden>
             <label>แก้ไขชื่อสินค้า</label>
             <div class="pr-product-rename-row">
               <input id="add-data-product-rename-new" type="text" placeholder="ชื่อสินค้าใหม่" />
@@ -3487,7 +3502,7 @@ function renderAddDataPanel() {
         </div>
 
         <div class="pr-add-data-actions">
-          <button class="btn-submit" type="button" onclick="saveAddDataVendorProduct(this)">
+          <button class="btn-submit" type="button" onclick="handleAddDataPrimarySave(this)">
             บันทึกข้อมูล
           </button>
         </div>
@@ -3515,6 +3530,7 @@ function renderAddDataPanel() {
   enhanceAddDataCostInputs();
   enhanceAddDataAddressCounters();
   enhanceAddDataRenameHistoryCheck();
+  enhanceAddDataEditModeControls();
   bindAddDataProductDetailEvents(productSelect);
 }
 
@@ -3529,6 +3545,129 @@ function enhanceAddDataRenameHistoryCheck() {
 
   input.addEventListener('change', syncCheckedState);
   syncCheckedState();
+}
+
+function getAddDataSelectedVendorName() {
+  return String(document.getElementById('add-data-vendor-name')?.value || '').trim();
+}
+
+function getAddDataSelectedProductName() {
+  return String(document.getElementById('add-data-product-select')?.value || '').trim();
+}
+
+function updateAddDataEditModeUi() {
+  const status = document.getElementById('add-data-edit-status');
+  const productRenameBox = document.querySelector('[data-add-data-product-rename-box]');
+  const vendorRenameBox = document.querySelector('[data-add-data-vendor-rename-box]');
+  const saveButton = document.querySelector('.pr-add-data-actions .btn-submit');
+  const vendorSelect = document.getElementById('add-data-vendor-name');
+  const productSelect = document.getElementById('add-data-product-select');
+  const lockVendorSelect = addDataEditMode === 'vendor';
+  const lockProductSelect = addDataEditMode === 'product';
+
+  document.querySelectorAll('[data-add-data-edit-mode]').forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.addDataEditMode === addDataEditMode);
+  });
+
+  if (vendorSelect) {
+    vendorSelect.disabled = lockVendorSelect;
+    vendorSelect.closest('.field-group')?.classList.toggle('is-edit-locked', lockVendorSelect);
+    if (vendorSelect.tomselect) {
+      if (lockVendorSelect) {
+        vendorSelect.tomselect.close();
+        vendorSelect.tomselect.disable();
+      } else {
+        vendorSelect.tomselect.enable();
+      }
+    }
+  }
+
+  if (productSelect) {
+    productSelect.disabled = lockProductSelect;
+    productSelect.closest('.field-group')?.classList.toggle('is-edit-locked', lockProductSelect);
+    if (productSelect.tomselect) {
+      if (lockProductSelect) {
+        productSelect.tomselect.close();
+        productSelect.tomselect.disable();
+      } else {
+        productSelect.tomselect.enable();
+      }
+    }
+  }
+
+  if (productRenameBox) {
+    productRenameBox.hidden = addDataEditMode !== 'product';
+  }
+
+  if (vendorRenameBox) {
+    vendorRenameBox.hidden = addDataEditMode !== 'vendor';
+  }
+
+  if (saveButton) {
+    saveButton.textContent = addDataEditMode === 'vendor'
+      ? 'บันทึกชื่อบริษัท'
+      : addDataEditMode === 'product'
+        ? 'บันทึกชื่อสินค้า'
+        : 'บันทึกข้อมูล';
+  }
+
+  if (!status) return;
+
+  if (!addDataEditMode) {
+    status.hidden = true;
+    status.textContent = '';
+    status.className = 'pr-add-data-edit-status';
+    return;
+  }
+
+  const originalText = addDataEditMode === 'vendor'
+    ? addDataEditOriginalVendorName
+    : addDataEditOriginalProductName;
+  status.hidden = false;
+  status.className = `pr-add-data-edit-status is-${addDataEditMode}`;
+  status.textContent = addDataEditMode === 'vendor'
+    ? `โหมดแก้ไขชื่อบริษัท: ${originalText || 'ยังไม่ได้เลือกบริษัท'}`
+    : `โหมดแก้ไขชื่อสินค้า: ${originalText || 'ยังไม่ได้เลือกสินค้า'}`;
+}
+
+function setAddDataEditMode(mode = '') {
+  const nextMode = addDataEditMode === mode ? '' : mode;
+  addDataEditMode = nextMode;
+  addDataEditOriginalVendorName = '';
+  addDataEditOriginalVendorId = null;
+  addDataEditOriginalProductName = '';
+
+  if (nextMode === 'vendor') {
+    addDataEditOriginalVendorName = getAddDataSelectedVendorName();
+    addDataEditOriginalVendorId = addDataVendorMetaMap.get(getAddDataVendorKey(addDataEditOriginalVendorName))?.id || null;
+    const renameInput = document.getElementById('add-data-vendor-rename-new');
+    if (renameInput) {
+      renameInput.value = addDataEditOriginalVendorName || '';
+      window.setTimeout(() => {
+        renameInput.focus();
+        renameInput.select();
+      }, 0);
+    }
+  }
+
+  if (nextMode === 'product') {
+    addDataEditOriginalProductName = getAddDataSelectedProductName();
+    const renameInput = document.getElementById('add-data-product-rename-new');
+    if (renameInput && addDataEditOriginalProductName && !renameInput.value) {
+      renameInput.value = addDataEditOriginalProductName;
+      renameInput.focus();
+      renameInput.select();
+    }
+  }
+
+  updateAddDataEditModeUi();
+}
+
+function enhanceAddDataEditModeControls() {
+  document.querySelectorAll('[data-add-data-edit-mode]').forEach((button) => {
+    button.addEventListener('click', () => setAddDataEditMode(button.dataset.addDataEditMode || ''));
+  });
+  updateAddDataEditModeUi();
 }
 
 function refreshAddDataAddressCounter(input) {
@@ -3688,7 +3827,7 @@ async function loadAddDataVendorSelect(select) {
   try {
     const { data, error } = await supabaseClient
       .from('vendors')
-      .select('vendor_name, address_1, address_2, phone, contact_name, credit_terms, email, is_active')
+      .select('id, vendor_name, address_1, address_2, phone, contact_name, credit_terms, email, is_active')
       .eq('is_active', true)
       .order('vendor_name', { ascending: true });
 
@@ -3697,6 +3836,7 @@ async function loadAddDataVendorSelect(select) {
     addDataVendorMetaMap = new Map();
     const vendors = (data || [])
       .map((vendor) => ({
+        id: vendor.id,
         name: String(vendor.vendor_name || '').trim(),
         address1: vendor.address_1 || '',
         address2: vendor.address_2 || '',
@@ -4322,7 +4462,7 @@ async function renameAddDataProduct(button) {
   }
 
   const productSelect = document.getElementById('add-data-product-select');
-  const oldProduct = String(productSelect?.value || '').trim();
+  const oldProduct = String(addDataEditOriginalProductName || productSelect?.value || '').trim();
   const newProduct = String(document.getElementById('add-data-product-rename-new')?.value || '').trim();
   const updateHistory = Boolean(document.getElementById('add-data-product-rename-history')?.checked);
 
@@ -4368,6 +4508,9 @@ async function renameAddDataProduct(button) {
     document.getElementById('add-data-product-rename-new').value = '';
     const historyInput = document.getElementById('add-data-product-rename-history');
     if (historyInput) historyInput.checked = false;
+    addDataEditMode = '';
+    addDataEditOriginalProductName = '';
+    updateAddDataEditModeUi();
 
     prVendorProductCompanyLoaded = false;
     prVendorProductCompanyMap = new Map();
@@ -4402,6 +4545,118 @@ async function renameAddDataProduct(button) {
   } finally {
     if (button) button.disabled = false;
   }
+}
+
+async function renameAddDataVendor(button) {
+  if (typeof supabaseClient === 'undefined') {
+    showToast('ไม่พบการเชื่อมต่อ Supabase', 'error');
+    return;
+  }
+
+  const vendorSelect = document.getElementById('add-data-vendor-name');
+  const oldVendorName = String(addDataEditOriginalVendorName || '').trim();
+  const newVendorName = String(document.getElementById('add-data-vendor-rename-new')?.value || '').trim();
+
+  if (!oldVendorName) {
+    showToast('กรุณาเลือกบริษัทเดิมก่อน', 'error');
+    return;
+  }
+
+  if (!newVendorName) {
+    showToast('กรุณากรอกชื่อบริษัทใหม่', 'error');
+    return;
+  }
+
+  if (getAddDataVendorKey(oldVendorName) === getAddDataVendorKey(newVendorName)) {
+    showToast('ชื่อบริษัทเดิมและชื่อใหม่เหมือนกัน', 'error');
+    return;
+  }
+
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
+
+  showToast('', 'loading', 'กำลังเปลี่ยนชื่อบริษัท...');
+
+  try {
+    const { data, error } = await supabaseClient.rpc('rename_vendor', {
+      p_vendor_id: addDataEditOriginalVendorId,
+      p_old_vendor_name: oldVendorName,
+      p_new_vendor_name: newVendorName,
+      p_address_1: document.getElementById('add-data-vendor-address-1')?.value.trim() || '',
+      p_address_2: document.getElementById('add-data-vendor-address-2')?.value.trim() || '',
+      p_phone: document.getElementById('add-data-vendor-phone')?.value.trim() || '',
+      p_contact_name: document.getElementById('add-data-vendor-contact')?.value.trim() || '',
+      p_credit_terms: document.getElementById('add-data-vendor-credit')?.value.trim() || '',
+      p_email: document.getElementById('add-data-vendor-email')?.value.trim() || '',
+      p_changed_by_code: currentUser?.code || '',
+      p_changed_by_name: currentUser?.name || currentUser?.code || '',
+    });
+
+    if (error) throw error;
+    if (!data || data.success !== true) {
+      throw new Error('ไม่พบชื่อบริษัทเดิม');
+    }
+
+    const oldKey = getAddDataVendorKey(oldVendorName);
+    const newKey = getAddDataVendorKey(newVendorName);
+    const meta = addDataVendorMetaMap.get(oldKey) || {};
+    const updatedVendorMeta = {
+      ...meta,
+      id: data.vendor_id || meta.id,
+      name: newVendorName,
+      address1: document.getElementById('add-data-vendor-address-1')?.value.trim() || '',
+      address2: document.getElementById('add-data-vendor-address-2')?.value.trim() || '',
+      phone: document.getElementById('add-data-vendor-phone')?.value.trim() || '',
+      contactName: document.getElementById('add-data-vendor-contact')?.value.trim() || '',
+      creditTerms: document.getElementById('add-data-vendor-credit')?.value.trim() || '',
+      email: document.getElementById('add-data-vendor-email')?.value.trim() || '',
+    };
+    addDataVendorMetaMap.delete(oldKey);
+    addDataVendorMetaMap.set(newKey, updatedVendorMeta);
+
+    if (vendorSelect?.tomselect) {
+      vendorSelect.tomselect.removeOption(oldVendorName);
+      vendorSelect.tomselect.addOption({ value: newVendorName, text: newVendorName });
+      vendorSelect.tomselect.refreshOptions(false);
+      vendorSelect.tomselect.setValue(newVendorName, true);
+    } else if (vendorSelect) {
+      const option = Array.from(vendorSelect.options).find((item) => item.value === oldVendorName);
+      if (option) {
+        option.value = newVendorName;
+        option.textContent = newVendorName;
+      } else {
+        vendorSelect.add(new Option(newVendorName, newVendorName));
+      }
+      vendorSelect.value = newVendorName;
+    }
+
+    addDataEditMode = '';
+    addDataEditOriginalVendorName = '';
+    addDataEditOriginalVendorId = null;
+    const vendorRenameInput = document.getElementById('add-data-vendor-rename-new');
+    if (vendorRenameInput) vendorRenameInput.value = '';
+    updateAddDataEditModeUi();
+    showToast('เปลี่ยนชื่อบริษัทเรียบร้อย', 'success');
+  } catch (error) {
+    console.error('renameAddDataVendor error:', error);
+    showToast(`เปลี่ยนชื่อบริษัทไม่สำเร็จ: ${error.message || error}`, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function handleAddDataPrimarySave(button) {
+  if (addDataEditMode === 'vendor') {
+    renameAddDataVendor(button);
+    return;
+  }
+
+  if (addDataEditMode === 'product') {
+    renameAddDataProduct(button);
+    return;
+  }
+
+  saveAddDataVendorProduct(button);
 }
 
 async function saveAddDataVendorProduct(button) {
@@ -4522,6 +4777,11 @@ async function saveAddDataVendorProduct(button) {
     prVendorProductCompanyMap = new Map();
     prProductTypeLoaded = false;
     prProductTypeMap = new Map();
+    addDataEditMode = '';
+    addDataEditOriginalVendorName = '';
+    addDataEditOriginalVendorId = null;
+    addDataEditOriginalProductName = '';
+    updateAddDataEditModeUi();
     resetAddDataForm();
     const vendorSelect = document.getElementById('add-data-vendor-name');
     if (vendorSelect) {

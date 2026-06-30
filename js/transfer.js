@@ -2405,9 +2405,17 @@ function escapeSupabaseLike(value) {
   return String(value || '').replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
+function isAddDataTransaction(tx = {}) {
+  const requestId = String(tx.request_id || '').trim().toUpperCase();
+  const note = String(tx.note || '').toLowerCase();
+  return requestId.startsWith('ADJ-') || note.includes('add data');
+}
+
 function getTransferHistorySource(tx = {}) {
   const action = cleanTransferHistoryAction(tx.action);
   if (tx.source_center) return tx.source_center;
+  if (isAddDataTransaction(tx) && action === 'STOCK_IN') return 'Add Data';
+  if (isAddDataTransaction(tx) && action === 'STOCK_OUT') return tx.center || '';
   if (action === 'STOCK_IN') return tx.target_center || '';
   if (action === 'TRANSFER_ACCEPT') return tx.target_center || '';
   return tx.center || '';
@@ -2416,6 +2424,8 @@ function getTransferHistorySource(tx = {}) {
 function getTransferHistoryDestination(tx = {}) {
   const action = cleanTransferHistoryAction(tx.action);
   if (tx.destination_center) return tx.destination_center;
+  if (isAddDataTransaction(tx) && action === 'STOCK_IN') return tx.center || tx.target_center || '';
+  if (isAddDataTransaction(tx) && action === 'STOCK_OUT') return 'Add Data';
   if (action === 'STOCK_IN') return tx.center || tx.target_center || '';
   if (action === 'TRANSFER_ACCEPT') return tx.center || '';
   return tx.target_center || '';
@@ -2432,8 +2442,12 @@ function getTransferHistoryUnit(tx = {}) {
   return tx.unit || '';
 }
 
-function getTransferHistoryActionLabel(action = '') {
+function getTransferHistoryActionLabel(txOrAction = '') {
+  const tx = typeof txOrAction === 'object' && txOrAction !== null ? txOrAction : null;
+  const action = tx ? tx.action : txOrAction;
   const normalized = cleanTransferHistoryAction(action);
+  if (tx && isAddDataTransaction(tx) && normalized === 'STOCK_IN') return 'Add Data';
+  if (tx && isAddDataTransaction(tx) && normalized === 'STOCK_OUT') return 'ปรับสต็อก';
   if (normalized === 'STOCK_IN') return 'รับเข้า';
   if (normalized === 'STOCK_OUT') return 'เบิก/ตัดสต็อก';
   if (normalized === 'TRANSFER_OUT') return 'โอนย้าย';
@@ -2441,8 +2455,11 @@ function getTransferHistoryActionLabel(action = '') {
   return action || '-';
 }
 
-function getTransferHistoryActionClass(action = '') {
+function getTransferHistoryActionClass(txOrAction = '') {
+  const tx = typeof txOrAction === 'object' && txOrAction !== null ? txOrAction : null;
+  const action = tx ? tx.action : txOrAction;
   const normalized = cleanTransferHistoryAction(action);
+  if (tx && isAddDataTransaction(tx)) return 'is-add-data';
   if (normalized === 'STOCK_IN') return 'is-stock-in';
   if (normalized === 'STOCK_OUT') return 'is-stock-out';
   if (normalized === 'TRANSFER_OUT') return 'is-transfer';
@@ -2495,13 +2512,13 @@ function renderTransferTransactionHistory(records = []) {
     const sourceCenter = getTransferHistorySource(tx);
     const destinationCenter = getTransferHistoryDestination(tx);
     const balance = tx.stock_balance_after;
-    const actionLabel = getTransferHistoryActionLabel(tx.action);
+    const actionLabel = getTransferHistoryActionLabel(tx);
 
     return `
       <div class="transfer-history-row">
         <span>${escapeHtml(getTransferHistoryDateText(tx.created_at))}</span>
         <span>
-          <span class="transfer-history-type ${escapeHtml(getTransferHistoryActionClass(tx.action))}">
+          <span class="transfer-history-type ${escapeHtml(getTransferHistoryActionClass(tx))}">
             ${escapeHtml(actionLabel)}
           </span>
         </span>
