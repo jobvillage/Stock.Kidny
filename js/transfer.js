@@ -152,7 +152,8 @@ async function submitTransfer() {
 }
 
 const PO_CENTER_CACHE_KEY = 'po_center_cache_v1';
-const PO_EMAIL_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby6HftKeGFb0nrEYydWwH4Ps98patvyHfmGX0q1v5acpKSeqiuW9e5p_RIg0Qucz0K5rw/exec';
+const PR_APPROVAL_REQUEST_EMAIL_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycby6HftKeGFb0nrEYydWwH4Ps98patvyHfmGX0q1v5acpKSeqiuW9e5p_RIg0Qucz0K5rw/exec';
+const PO_EMAIL_WEB_APP_URL = PR_APPROVAL_REQUEST_EMAIL_WEB_APP_URL;
 
 function getPoCenterCache() {
   try {
@@ -172,7 +173,9 @@ function savePoCenterToCache(poId, center) {
 
 function buildPoEmailPayload(po) {
   return {
+    email_type: 'pr_request',
     po_id: po.po_id || po.po_no || po.po_number || '',
+    pr_id: po.po_id || po.po_no || po.po_number || '',
     po_date: po.po_date || '',
     po_person: po.po_person || '',
     center: getPoCenter(po),
@@ -204,7 +207,7 @@ async function sendPrApprovalRequest(prId, button) {
     return;
   }
 
-  if (!PO_EMAIL_WEB_APP_URL) {
+  if (!PR_APPROVAL_REQUEST_EMAIL_WEB_APP_URL) {
     showToast('⚠️ ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งรายการขออนุมัติ PR', 'error');
     return;
   }
@@ -280,7 +283,7 @@ async function sendPoEmail(poId, button, options = {}) {
     throw new Error('ไม่พบข้อมูล PR นี้');
   }
 
-  if (!PO_EMAIL_WEB_APP_URL) {
+  if (!PR_APPROVAL_REQUEST_EMAIL_WEB_APP_URL) {
     if (!silent) showToast('⚠️ ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งอีเมล PR', 'error');
     if (!silent) return false;
     throw new Error('ยังไม่ได้ตั้งค่า Apps Script สำหรับส่งอีเมล PR');
@@ -300,7 +303,7 @@ async function sendPoEmail(poId, button, options = {}) {
   }
 
   try {
-    await fetch(PO_EMAIL_WEB_APP_URL, {
+    await fetch(PR_APPROVAL_REQUEST_EMAIL_WEB_APP_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: {

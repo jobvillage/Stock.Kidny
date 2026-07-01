@@ -757,6 +757,7 @@ function getPrApprovedEmailWebAppUrl() {
 
 function buildPrApprovedEmailPayload(record = {}) {
   return {
+    email_type: 'pr_approved',
     pr_id: record.po_id || record.pr_id || '',
     pr_date: record.po_date || record.pr_date || '',
     pr_person: record.po_person || record.pr_person || '',
